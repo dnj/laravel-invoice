@@ -6,7 +6,7 @@ use dnj\Currency\Models\Currency;
 trait ModelHelpers {
 	protected function getUserModel(): ?string
 	{
-		return config('account.user_model');
+		return config('invoice.user_model');
 	}
 	
 	protected function getUserTable(): ?string
