@@ -22,6 +22,8 @@ class Invoice extends Model implements IInvoice
         'status' => InvoiceStatus::class,
         'meta' => 'array',
     ];
+	
+	protected $table = 'invoice';
 
     public function products()
     {

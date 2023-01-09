@@ -15,6 +15,8 @@ class Product extends Model implements IProduct
         'discount' => Number::class,
         'meta' => 'array',
     ];
+	
+	protected $table = 'invoice_products';
 
     public function invoice()
     {

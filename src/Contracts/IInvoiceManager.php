@@ -26,7 +26,7 @@ interface IInvoiceManager
     /**
      * @param ProductInput $product
      */
-    public function addProductToInvoice(int $invoiceId, array $product): IProduct;
+    public function addProductToInvoice(int $invoiceId, array $products): IProduct;
 
     /**
      * @param array{price?:INumber,discount?:INumber,currencyId?:int,count?:int,distributionPlan?:array<int,INumber>,meta?:array|null} $changes
@@ -40,17 +40,13 @@ interface IInvoiceManager
      * @param array<string,array{title:string}> $localizedDetails
      */
     public function merge(array $invoiceIds, array $localizedDetails): IInvoice;
-
-    /**
-     * @param int[][]
-     *
-     * @return IInvoice[]
-     */
-    public function split(array $invoiceIds): array;
+	
 
     public function addPaymentToInvoice(int $invoiceId, string $type, INumber $amount, PaymentStatus $status, ?array $meta): IPayment;
 
     public function approvePayment(int $paymentId): IPayment;
 
     public function rejectPayment(int $paymentId): IPayment;
+	
+	public function getInvoiceById(int $invoiceId):IInvoice;
 }
