@@ -7,6 +7,9 @@ use dnj\Currency\Contracts\ICurrencyManager;
 use dnj\Currency\Contracts\RoundingBehaviour;
 use dnj\Currency\CurrencyServiceProvider;
 use dnj\Invoice\Contracts\IInvoiceManager;
+use dnj\Invoice\Contracts\IPayment;
+use dnj\Invoice\Contracts\PaymentStatus;
+use dnj\Invoice\InvoiceServiceProvider;
 use dnj\Invoice\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -27,6 +30,7 @@ class TestCase extends \Orchestra\Testbench\TestCase {
 	protected function getPackageProviders ( $app ) {
 		return [
 			CurrencyServiceProvider::class ,
+			InvoiceServiceProvider::class ,
 		];
 	}
 	
@@ -55,5 +59,33 @@ class TestCase extends \Orchestra\Testbench\TestCase {
 	
 	public function createUser () {
 		return factory(User::class)->create();
+	}
+	
+	public function products () {
+		return [
+			[
+				'title' => 'product1' ,
+				'price' => 125.000 ,
+				'count' => 2 ,
+			] ,
+			[
+				'title' => 'product2' ,
+				'price' => 153.000 ,
+				'discount' => 120.000 ,
+				'count' => 1 ,
+			] ,
+		];
+	}
+	
+	public function createPaymentInvioce (): IPayment {
+		$user = $this->createUser();
+		$USD = $this->createUSD();
+		$invoice = $this->createInvoice($user->id , $USD->getID() , $this->products() , [ 'title' => 'invoice one' ]);
+		$payment = $this->getInvoiceManager()
+						->addPaymentToInvoice($invoice->getID() , 'online' , $invoice->getAmount() , PaymentStatus::PENDING , [
+							'key' => 'value',
+						]);
+		
+		return $payment;
 	}
 }

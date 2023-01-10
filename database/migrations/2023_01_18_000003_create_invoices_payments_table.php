@@ -10,7 +10,7 @@ return new class extends Migration
 
     public function up(): void
     {
-        Schema::create('invoices_payments', function (Blueprint $table) {
+        Schema::create('invoice_payments', function (Blueprint $table) {
 			$floatScale = $this->getFloatScale();
             $table->id();
             $table->foreignId('invoice_id');
@@ -18,7 +18,7 @@ return new class extends Migration
             $table->timestamps();
             $table->string('method');
             $table->decimal('amount', 10 + $floatScale, $floatScale);
-            $table->enum('status',['approve','pending','rejected']);
+            $table->string('status');
             $table->json('meta')->nullable();
 
             $table->foreign('Invoice_id')
@@ -29,7 +29,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('invoices_payments');
+        Schema::dropIfExists('invoice_payments');
     }
 
 };

@@ -1,6 +1,6 @@
 <?php
 
-namespace dnj\INovice\Models;
+namespace dnj\Invoice\Models;
 
 use dnj\Invoice\Contracts\IProduct;
 use dnj\Invoice\Models\Invoice;
@@ -15,6 +15,8 @@ class Product extends Model implements IProduct
         'discount' => Number::class,
         'meta' => 'array',
     ];
+	
+	protected $guarded = [];
 	
 	protected $table = 'invoice_products';
 

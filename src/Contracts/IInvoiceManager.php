@@ -26,7 +26,7 @@ interface IInvoiceManager
     /**
      * @param ProductInput $product
      */
-    public function addProductToInvoice(int $invoiceId, array $products): IProduct;
+    public function addProductToInvoice(int $invoiceId, array $product): IProduct;
 
     /**
      * @param array{price?:INumber,discount?:INumber,currencyId?:int,count?:int,distributionPlan?:array<int,INumber>,meta?:array|null} $changes

@@ -1,6 +1,6 @@
 <?php
 
-namespace dnj\INovice\Models;
+namespace dnj\Invoice\Models;
 
 use dnj\Account\Models\Transaction;
 use dnj\Invoice\Contracts\IPayment;
@@ -15,6 +15,8 @@ class Payment extends Model implements IPayment {
 		'amount' => Number::class ,
 		'meta' => 'array' ,
 	];
+	
+	public $guarded = [];
 	protected $table = "invoice_payments";
 	
 	public function invoice () {

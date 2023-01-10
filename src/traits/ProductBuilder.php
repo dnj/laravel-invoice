@@ -4,11 +4,10 @@ namespace dnj\Invoice\traits;
 trait ProductBuilder {
 	public function buliderInvoiceProducts ( array $products ): array {
 		foreach ( $products as $key => $product ) {
-			
-			if ( isset($product[ 'price' ]) ) {
-				$product[ $key ][ 'total_amount' ] = $product[ 'count' ] * $product[ 'price' ];
+			if ( isset($product[ 'discount' ]) ) {
+				$products[ $key ][ 'total_amount' ] = $product[ 'count' ] * $product[ 'discount' ];
 			} else {
-				$product[ $key ][ 'total_amount' ] = $product[ 'count' ] * $product[ 'discount' ];
+				$products[ $key ][ 'total_amount' ] = $product[ 'count' ] * $product[ 'price' ];
 			}
 		}
 		

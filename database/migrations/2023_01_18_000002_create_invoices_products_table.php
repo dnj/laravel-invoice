@@ -10,15 +10,15 @@ return new class extends Migration
 
     public function up(): void
     {
-        Schema::create('invoices_products', function (Blueprint $table) {
+        Schema::create('invoice_products', function (Blueprint $table) {
 			$floatScale = $this->getFloatScale();
             $table->id();
             $table->string('title', 255);
-            $table->foreignId('Invoice_id');
+            $table->foreignId('invoice_id');
             $table->timestamps();
             $table->decimal('price', 10 + $floatScale, $floatScale);
-            $table->decimal('discount', 10 + $floatScale, $floatScale);
-            $table->decimal('total_amount', 10 + $floatScale, $floatScale);
+            $table->decimal('discount', 10 + $floatScale, $floatScale)->nullable();
+            $table->decimal('total_amount', 10 + $floatScale, $floatScale)->nullable();
             $table->integer('count');
             $table->json('meta')->nullable();
             $table->json('distribution_plan')->nullable();
@@ -33,7 +33,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('invoices_products');
+        Schema::dropIfExists('invoice_products');
     }
 
 };

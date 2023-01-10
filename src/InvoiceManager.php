@@ -2,8 +2,9 @@
 
 namespace dnj\Invoice;
 
-use dnj\INovice\Models\Payment;
-use dnj\INovice\Models\Product;
+use dnj\Invoice\Exceptions\AmountInvoiceMismatchException;
+use dnj\Invoice\Models\Payment;
+use dnj\Invoice\Models\Product;
 use dnj\Invoice\Contracts\IInvoice;
 use dnj\Invoice\Contracts\IInvoiceManager;
 use dnj\Invoice\Contracts\InvoiceStatus;
@@ -15,6 +16,7 @@ use dnj\Invoice\Exceptions\InvalidInvoiceStatusException;
 use dnj\Invoice\Models\Invoice;
 use dnj\Invoice\traits\ProductBuilder;
 use dnj\Number\Contracts\INumber;
+use dnj\Number\Number;
 use Illuminate\Support\Facades\DB;
 
 class InvoiceManager implements IInvoiceManager {
@@ -24,23 +26,26 @@ class InvoiceManager implements IInvoiceManager {
 		// TODO: Implement create() method.
 		$invoice = new Invoice();
 		$invoice->user_id = $userId;
-		$invoice->currencyId = $currencyId;
+		$invoice->currency_id = $currencyId;
 		$invoice->meta = $meta;
 		if ( isset($localizedDetails[ 'title' ]) ) {
 			$invoice->title = $localizedDetails[ 'title' ];
 		}
+		$invoice->status = InvoiceStatus::UNPAID->value;
 		$invoice->save();
 		$invoice->products()
 				->createMany($this->buliderInvoiceProducts($products));
-		$invoice->amount = $this->calculationTotalAmountProduct($products);
+		$invoice->update([
+							 'amount' => Number::formString($invoice->products->sum('total_amount'))
+											   ->getValue() ,
+						 ]);
 		
 		return $invoice;
-		//$invoice->pro
 	}
 	
 	public function delete ( int $invoiceId ): void {
 		// TODO: Implement delete() method.
-		$invoice = $this->getById($invoiceId);
+		$invoice = $this->getInvoiceById($invoiceId);
 		if ( $invoice->status == InvoiceStatus::PAID ) {
 			throw new InvalidInvoiceStatusException();
 		}
@@ -55,9 +60,10 @@ class InvoiceManager implements IInvoiceManager {
 		$invoice->delete();
 	}
 	
+	// TODO: fix update products.
 	public function update ( int $invoiceId , array $changes ): IInvoice {
 		// TODO: Implement update() method.
-		$invoice = $this->getById($invoiceId);
+		$invoice = $this->getInvoiceById($invoiceId);
 		if ( $invoice->status == InvoiceStatus::PAID ) {
 			throw new InvalidInvoiceStatusException();
 		}
@@ -73,40 +79,51 @@ class InvoiceManager implements IInvoiceManager {
 				$invoice->meta = $changes[ 'meta' ];
 			}
 			if ( isset($changes[ 'currencyId' ]) ) {
-				$invoice->currencyId = $changes[ 'currencyId' ];
+				$invoice->currency_id = $changes[ 'currencyId' ];
 			}
 			if ( isset($changes[ 'products' ]) ) {
 				$invoice->products()
-						->delete();
-				$invoice->products()
 						->createMany($this->buliderInvoiceProducts($changes[ 'products' ]));
-				$invoice->amount = $this->calculationTotalAmountProduct($changes[ 'products' ]);
+				$invoice->amount = Number::formString($invoice->products->sum('total_amount'))
+										 ->getValue();
 			}
-			$invoice->save();
 			
 			return $invoice;
 		});
 	}
 	
-	public function addProductToInvoice ( int $invoiceId , array $products ): IProduct {
+	public function addProductToInvoice ( int $invoiceId , array $product ): IProduct {
 		// TODO: Implement addProductToInvoice() method.
-		$invoice = $this->getById($invoiceId);
+		$invoice = $this->getInvoiceById($invoiceId);
 		
-		return DB::transaction(function () use ( $invoice , $products ) {
-			$invoice->products()
-					->createMany($this->buliderInvoiceProducts($products));
-			$invoice->amount = $this->calculationTotalAmountProduct($products);
-			$invoice->save();
+		return DB::transaction(function () use ( $invoice , $product ) {
 			
-			return $invoice->products;
+			$record = new \dnj\Invoice\Models\Product();
+			$record->title = $product[ 'title' ];
+			$record->price = $product[ 'price' ];
+			$record->count = $product[ 'count' ];
+			$record->discount = $product[ 'discount' ];
+			$record->invoice_id = $invoice->getID();
+			$record->save();
+			$record->update([
+								'total_amount' => $record->getTotalAmount() ,
+							]);
+			$amount = $record->getTotalAmount()
+							 ->getValue() + $invoice->getAmount()
+													->getValue();
+			$invoice->update([
+								 'amount' => Number::formString($amount)
+												   ->getValue() ,
+							 ]);
+			
+			return $record;
 		});
 	}
 	
 	public function updateProduct ( int $productId , array $changes ): IProduct {
 		// TODO: Implement updateProduct() method.
 		$product = Product::query()
-						  ->where('id' , $productId)
-						  ->first();
+						  ->findOrFail($productId);
 		
 		return DB::transaction(function () use ( $product , $changes ) {
 			
@@ -120,7 +137,7 @@ class InvoiceManager implements IInvoiceManager {
 				$product->count = $changes[ 'count' ];
 			}
 			if ( isset($changes[ 'distributionPlan' ]) ) {
-				$product->distributionPlan = $changes[ 'distributionPlan' ];
+				$product->distribution_plan = $changes[ 'distributionPlan' ];
 			}
 			if ( isset($changes[ 'distribution' ]) ) {
 				$product->distribution = $changes[ 'distribution' ];
@@ -143,9 +160,8 @@ class InvoiceManager implements IInvoiceManager {
 	public function deleteProduct ( int $productId ): IInvoice {
 		// TODO: Implement deleteProduct() method.
 		$product = Product::query()
-						  ->where('id' , $productId)
-						  ->firstOrFail();
-		$invoice = $this->getById($product->invoice_id);
+						  ->findOrFail($productId);
+		$invoice = $this->getInvoiceById($product->invoice_id);
 		$product->delete();
 		
 		return $invoice;
@@ -168,16 +184,17 @@ class InvoiceManager implements IInvoiceManager {
 			if ( $first_invoice->getCurrencyId() !== $second_invoice->getCurrencyId() ) {
 				throw new CurrencyMismatchException();
 			}
-			$this->createInvoice($first_invoice , $second_invoice , $localizedDetails);
+			
+			return $this->createInvoice($first_invoice , $second_invoice , $localizedDetails);
 		});
 	}
 	
 	protected function createInvoice ( Invoice $first_invoice , Invoice $second_invoice , array $localizedDetails ): IInvoice {
 		$invoice = new Invoice();
 		$invoice->user_id = $first_invoice->user_id;
-		$invoice->currencyId = $first_invoice->currency_id;
-		$invoice->meta = array_map($first_invoice->meta , $second_invoice->meta);
-		$invoice->amount = $first_invoice->amount + $second_invoice->amount;
+		$invoice->currency_id = $first_invoice->currency_id;
+		$invoice->meta = array_merge($first_invoice->meta , $second_invoice->meta);
+		$invoice->amount = $first_invoice->amount->getValue() + $second_invoice->amount->getValue();
 		if ( isset($localizedDetails[ 'title' ]) ) {
 			$invoice->title = $localizedDetails[ 'title' ];
 		}
@@ -201,7 +218,7 @@ class InvoiceManager implements IInvoiceManager {
 		$payment->method = $type;
 		$payment->amount = $amount;
 		$payment->meta = $meta;
-		$payment->status = $status;
+		$payment->status = $status->value;
 		$payment->save();
 		
 		return $payment;
@@ -211,11 +228,20 @@ class InvoiceManager implements IInvoiceManager {
 		// TODO: Implement approvePayment() method.
 		$payment = Payment::query()
 						  ->findOrFail($paymentId);
-		$payment->update([
-							 'status' => PaymentStatus::APPROVED ,
-						 ]);
-		
-		return $payment;
+		if ( $payment->getAmount() == $payment->invoice->getAmount() ) {
+			
+			$payment->update([
+								 'status' => PaymentStatus::APPROVED ,
+							 ]);
+			$payment->invoice->update([
+										  'status' => InvoiceStatus::PAID ,
+									  ]);
+			
+			return $payment;
+		}
+		if ( $payment->getAmount() > $payment->invoice->getAmount() ) {
+			throw new AmountInvoiceMismatchException();
+		}
 	}
 	
 	public function rejectPayment ( int $paymentId ): IPayment {
@@ -232,8 +258,7 @@ class InvoiceManager implements IInvoiceManager {
 	public function getInvoiceById ( int $invoiceId ): IInvoice {
 		// TODO: Implement getById() method.
 		return Invoice::query()
-					  ->where('id' , $invoiceId)
-					  ->with('products')
-					  ->firstOrFail();
+					  ->findOrFail($invoiceId)
+					  ->load('products');
 	}
 }

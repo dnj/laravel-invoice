@@ -22,7 +22,7 @@ return new class extends Migration
             $table->decimal('unpaid_amount', 10 + $floatScale, $floatScale)->nullable();;
             $table->json('meta')->nullable();
 			$table->dateTime('paid_time')->nullable();
-            $table->enum("status",['paid','unpaid'])->nullable();
+            $table->string("status")->nullable();
 
             $table->foreign('currency_id')
                 ->references('id')
