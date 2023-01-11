@@ -24,6 +24,9 @@ return new class extends Migration
             $table->foreign('Invoice_id')
                 ->references('id')
                 ->on('invoices');
+			$table->foreign('transaction_id')
+				->references('id')
+				->on('transactions');
         });
     }
 

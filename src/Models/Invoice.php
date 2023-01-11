@@ -4,8 +4,7 @@ namespace dnj\Invoice\Models;
 
 use dnj\Currency\Contracts\IExchangeManager;
 use dnj\Currency\Models\Currency;
-use dnj\Invoice\Models\Payment;
-use dnj\Invoice\Models\Product;
+use dnj\Invoice\Database\Factories\InvoiceFactory;
 use dnj\Invoice\Contracts\IInvoice;
 use dnj\Invoice\Contracts\InvoiceStatus;
 use dnj\Invoice\Contracts\PaymentStatus;
@@ -15,9 +14,13 @@ use dnj\Number\Number;
 use Exception;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Invoice extends Model implements IInvoice {
+	
+	use HasFactory;
+	
 	protected $casts = [
 		'amount' => NumberCast::class ,
 		'status' => InvoiceStatus::class ,
@@ -138,10 +141,15 @@ class Invoice extends Model implements IInvoice {
 			$amountInSameCurrency = $exchange->convert($product->getTotalAmount() , $this->getCurrencyId() , $product->getCurrencyId() , true);
 			$result = $result->add($amountInSameCurrency);
 		}
+		dd($result);
 		$this->amount = $result;
 	}
 	
 	public function getTitle (): string {
 		return $this->title;
+	}
+	
+	protected static function newFactory () {
+		return InvoiceFactory::new();
 	}
 }

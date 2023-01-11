@@ -5,12 +5,16 @@ namespace dnj\Invoice\Models;
 use dnj\Account\Models\Transaction;
 use dnj\Invoice\Contracts\IPayment;
 use dnj\Invoice\Contracts\PaymentStatus;
+use dnj\Invoice\Database\Factories\PaymentFactory;
 use dnj\Invoice\Models\Invoice;
 use dnj\Number\Contracts\INumber;
 use dnj\Number\Laravel\Casts\Number;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Payment extends Model implements IPayment {
+	
+	use HasFactory;
 	protected $casts = [
 		'amount' => Number::class ,
 		'meta' => 'array' ,
@@ -65,5 +69,9 @@ class Payment extends Model implements IPayment {
 	
 	public function getMeta (): ?array {
 		return $this->meta;
+	}
+	
+	protected static  function newFactory () {
+		return PaymentFactory::new();
 	}
 }

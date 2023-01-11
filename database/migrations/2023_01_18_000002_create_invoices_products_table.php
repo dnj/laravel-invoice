@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('title', 255);
             $table->foreignId('invoice_id');
+            $table->foreignId('currency_id');
             $table->timestamps();
             $table->decimal('price', 10 + $floatScale, $floatScale);
             $table->decimal('discount', 10 + $floatScale, $floatScale)->nullable();
@@ -28,6 +29,9 @@ return new class extends Migration
             $table->foreign('Invoice_id')
                 ->references('id')
                 ->on('invoices');
+			$table->foreign('currency_id')
+				  ->references('id')
+				  ->on($this->getCurrencyTable());
         });
     }
 
