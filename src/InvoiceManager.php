@@ -239,14 +239,8 @@ class InvoiceManager implements IInvoiceManager
         $invoice = new Invoice();
         $invoice->user_id = $first_invoice->getUserId();
         $invoice->currency_id = $first_invoice->getCurrencyId();
-        if (null != $first_invoice->getMeta() && null != $second_invoice->getMeta()) {
-            $invoice->mete = array_merge($first_invoice->getMeta(), $second_invoice->getMeta());
-        }
-        if (null != $first_invoice->getMeta()) {
-            $invoice->mete = $first_invoice->getMeta();
-        }
-        if (null != $second_invoice->getMeta()) {
-            $invoice->mete = $second_invoice->getMeta();
+        if (null != $first_invoice->getMeta() || null != $second_invoice->getMeta()) {
+            $invoice->meta = array_merge($first_invoice->getMeta() ?? [], $second_invoice->getMeta() ?? []);
         }
         $invoice->amount = $first_invoice->amount->getValue() + $second_invoice->amount->getValue();
         if (isset($localizedDetails['title'])) {

@@ -42,6 +42,8 @@ class InvoiceManagerTest extends TestCase
     public function testDeleteInvoice(): void
     {
         $invoice = Invoice::factory()
+                          ->has(Product::factory())
+                          ->has(Payment::factory())
                           ->create();
         $this->getInvoiceManager()
              ->delete($invoice->getID());
@@ -59,12 +61,15 @@ class InvoiceManagerTest extends TestCase
 
     public function testUpdateInvoice()
     {
+        $user = User::factory()
+                    ->create();
         $invoice = Invoice::factory()
                           ->has(Product::factory(3), 'products')
                           ->create();
         $EUR = $this->createEUR();
         $data = [
             'title' => 'update invoice one',
+            'user_id' => $user->id,
             'meta' => [
                 'key1' => 'value',
             ],
@@ -96,6 +101,7 @@ class InvoiceManagerTest extends TestCase
         $this->assertSame($EUR->getID(), $response->getCurrencyId());
         $this->assertSame($data['meta'], $response->getMeta());
         $this->assertSame($data['title'], $response->getTitle());
+        $this->assertSame($data['user_id'], $response->getUserId());
         $invoice->update([
                              'status' => InvoiceStatus::PAID->value,
                          ]);
@@ -107,6 +113,37 @@ class InvoiceManagerTest extends TestCase
              ->update(11, $data);
     }
 
+    public function testAddProductToInvoice()
+    {
+        $invoice = Invoice::factory()
+                          ->create();
+        $USD = $this->createUSD();
+        $data = [
+            'title' => 'product3',
+            'price' => 300,
+            'discount' => 50.00,
+            'currencyId' => $USD->getID(),
+            'count' => 3,
+            'description' => 'this is a test',
+            'distributionPlan' => [
+                'key' => 'value',
+            ],
+            'distribution' => [
+                'key1' => 'value2',
+            ],
+            'meta' => [
+                'key2' => 'value2',
+            ],
+        ];
+        $product = $this->getInvoiceManager()
+                        ->addProductToInvoice($invoice->getID(), $data);
+        $this->assertSame($product->getTitle(), $product['title']);
+        $this->assertSame($product->getCount(), $product['count']);
+        $this->expectException(ModelNotFoundException::class);
+        $this->getInvoiceManager()
+             ->addProductToInvoice(11, $data);
+    }
+
     /**
      * Testing update product.
      */
@@ -114,15 +151,23 @@ class InvoiceManagerTest extends TestCase
     {
         $product = Product::factory()
                           ->create();
+        $EUR = $this->createEUR();
         $data = [
             'id' => 1,
             'title' => 'product3',
             'price' => 300,
             'discount' => 50.00,
             'count' => 3,
+            'currencyId' => $EUR->getID(),
             'description' => 'this is a test',
             'distributionPlan' => [
                 'key' => 'value',
+            ],
+            'distribution' => [
+                'key1' => 'value2',
+            ],
+            'meta' => [
+                'key2' => 'value2',
             ],
         ];
         $product = $this->getInvoiceManager()
@@ -161,6 +206,7 @@ class InvoiceManagerTest extends TestCase
         $second_invoice = Invoice::factory()
                                  ->withUser($user)
                                  ->withCurrency($USD)
+                                 ->withMeta(['key1' => 'value1'])
                                  ->create();
         $data = [
             'title' => 'Merge first invoice and second invoice',
@@ -283,7 +329,7 @@ class InvoiceManagerTest extends TestCase
     /**
      * Testing add payment to invoice.
      */
-    public function tes_addPaymentToInvoice(): void
+    public function testAddPaymentToInvoice(): void
     {
         $invoice = Invoice::factory()
                           ->withAmount(10000)
