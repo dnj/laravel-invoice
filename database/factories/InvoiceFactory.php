@@ -5,7 +5,7 @@ namespace dnj\Invoice\Database\Factories;
 use Carbon\Carbon;
 use dnj\Currency\Database\Factories\CurrencyFactory;
 use dnj\Currency\Models\Currency;
-use dnj\Invoice\Contracts\InvoiceStatus;
+use dnj\Invoice\Enums\InvoiceStatus;
 use dnj\Invoice\ModelHelpers;
 use dnj\Invoice\Models\Invoice;
 use dnj\Invoice\Tests\Factories\UserFactory;
@@ -29,8 +29,6 @@ class InvoiceFactory extends Factory
             'user_id' => $userModel::factory(),
             'currency_id' => Currency::factory(),
             'amount' => Number::fromInt(0),
-            'paid_amount' => Number::fromInt(0),
-            'unpaid_amount' => Number::fromInt(0),
             'meta' => null,
             'status' => InvoiceStatus::UNPAID,
         ];
@@ -50,10 +48,11 @@ class InvoiceFactory extends Factory
         ]);
     }
 
-    public function withStatus(InvoiceStatus $status)
+    public function withStatus(InvoiceStatus $status,Carbon $paid_at = null)
     {
         return $this->state(fn () => [
             'status' => $status,
+			'paid_at' => $paid_at
         ]);
     }
 
@@ -71,10 +70,10 @@ class InvoiceFactory extends Factory
         ]);
     }
 
-    public function withPaidTime(Carbon $paidTime)
+    public function withPaidAt(Carbon $paid_at)
     {
         return $this->state(fn () => [
-            'paid_time' => $paidTime,
+            'paid_at' => $paid_at,
         ]);
     }
 
@@ -82,20 +81,6 @@ class InvoiceFactory extends Factory
     {
         return $this->state(fn () => [
             'amount' => Number::fromInput($amount),
-        ]);
-    }
-
-    public function withPaidAmount(string|int|float|INumber $paidAmount)
-    {
-        return $this->state(fn () => [
-            'paid_amount' => Number::fromInput($paidAmount),
-        ]);
-    }
-
-    public function withUnPaidAmount(string|int|float|INumber $unpaidAmount)
-    {
-        return $this->state(fn () => [
-            'unpaid_amount' => Number::fromInput($unpaidAmount),
         ]);
     }
 
@@ -113,9 +98,9 @@ class InvoiceFactory extends Factory
                                            ->asEUR());
     }
 
-    public function paid()
+    public function paid(Carbon $paid_at)
     {
-        return $this->withStatus(InvoiceStatus::PAID);
+        return $this->withStatus(InvoiceStatus::PAID,$paid_at);
     }
 
     public function unPaid()

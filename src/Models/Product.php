@@ -21,7 +21,7 @@ class Product extends Model implements IProduct
         'distribution' => 'array',
     ];
     protected $guarded = [];
-    protected $table = 'invoice_products';
+    protected $table = 'invoices_products';
 
     public function invoice()
     {

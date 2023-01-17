@@ -2,6 +2,7 @@
 
 namespace dnj\Invoice\Contracts;
 
+use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Number\Contracts\INumber;
 
 /**

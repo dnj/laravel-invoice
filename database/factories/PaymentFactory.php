@@ -2,8 +2,9 @@
 
 namespace dnj\Invoice\Database\Factories;
 
+use dnj\Account\Database\Factories\TransactionFactory;
 use dnj\Account\Models\Transaction;
-use dnj\Invoice\Contracts\PaymentStatus;
+use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Invoice\Models\Invoice;
 use dnj\Invoice\Models\Payment;
 use dnj\Number\Number;

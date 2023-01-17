@@ -15,19 +15,13 @@
              $table->id();
              $table->string('title', 255);
              $table->foreignId('user_id');
-             $table->foreignId('currency_id');
+             $table->foreignId('currency_id')->constrained($this->getCurrencyTable());
              $table->timestamps();
              $table->decimal('amount', 10 + $floatScale, $floatScale)->nullable();
-             $table->decimal('paid_amount', 10 + $floatScale, $floatScale)->nullable();
-             $table->decimal('unpaid_amount', 10 + $floatScale, $floatScale)->nullable();
              $table->json('meta')->nullable();
-             $table->dateTime('paid_time')->nullable();
-             $table->string('status')->nullable();
-
-             $table->foreign('currency_id')
-                 ->references('id')
-                 ->on($this->getCurrencyTable());
-
+             $table->dateTime('paid_at')->nullable();
+             $table->enum('status',['paid','unpaid'])->default('unpaid');
+			 
              $userTable = $this->getUserTable();
              if ($userTable) {
                  $table->foreign('user_id')

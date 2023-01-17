@@ -38,7 +38,6 @@ trait ProductBuilder
             if (isset($product['meta'])) {
                 $items[$key]['meta'] = $product['meta'];
             }
-            $items[$key]['total_amount'] = (($product['price'] * $product['count']) - $product['discount']);
         }
 
         return $items;

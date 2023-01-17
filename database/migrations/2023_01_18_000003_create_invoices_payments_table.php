@@ -10,27 +10,21 @@
 
      public function up(): void
      {
-         Schema::create('invoice_payments', function (Blueprint $table) {
+         Schema::create('invoices_payments', function (Blueprint $table) {
              $floatScale = $this->getFloatScale();
              $table->id();
-             $table->foreignId('invoice_id');
-             $table->foreignId('transaction_id')->nullable();
+             $table->foreignId('invoice_id')->constrained('invoices')->cascadeOnDelete();
+             $table->foreignId('transaction_id')->nullable()->constrained('transactions');
              $table->timestamps();
              $table->string('method');
              $table->decimal('amount', 10 + $floatScale, $floatScale);
-             $table->string('status');
+             $table->enum('status',['approved','pending','rejected'])->default('pending');
              $table->json('meta')->nullable();
-
-             $table->foreign('Invoice_id')
-                 ->references('id')
-                 ->on('invoices');
-             $table->foreign('transaction_id')
-                 ->references('id')
-                 ->on('transactions');
          });
      }
 
      public function down(): void
+	 
      {
          Schema::dropIfExists('invoice_payments');
      }

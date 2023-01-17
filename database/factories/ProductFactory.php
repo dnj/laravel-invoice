@@ -37,7 +37,7 @@ class ProductFactory extends Factory
         ]);
     }
 
-    public function withTile(string $title)
+    public function withTitle(string $title)
     {
         return $this->state(fn () => [
             'title' => $title,
@@ -79,10 +79,10 @@ class ProductFactory extends Factory
         ]);
     }
 
-    public function withInvoice(int $invoiceId)
+    public function withInvoice(Invoice|InvoiceFactory $invoice)
     {
         return $this->state(fn () => [
-            'invoice_id' => $invoiceId,
+            'invoice_id' => $invoice,
         ]);
     }
 

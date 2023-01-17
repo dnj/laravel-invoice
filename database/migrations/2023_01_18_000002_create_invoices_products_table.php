@@ -10,11 +10,11 @@
 
      public function up(): void
      {
-         Schema::create('invoice_products', function (Blueprint $table) {
+         Schema::create('invoices_products', function (Blueprint $table) {
              $floatScale = $this->getFloatScale();
              $table->id();
              $table->string('title', 255);
-             $table->foreignId('invoice_id');
+             $table->foreignId('invoice_id')->constrained('invoices')->cascadeOnDelete();
              $table->foreignId('currency_id');
              $table->timestamps();
              $table->decimal('price', 10 + $floatScale, $floatScale);
@@ -24,14 +24,7 @@
              $table->json('meta')->nullable();
              $table->json('distribution_plan')->nullable();
              $table->json('distribution')->nullable();
-             $table->longText('description')->nullable();
-
-             $table->foreign('Invoice_id')
-                 ->references('id')
-                 ->on('invoices');
-             $table->foreign('currency_id')
-                   ->references('id')
-                   ->on($this->getCurrencyTable());
+             $table->text('description')->nullable();
          });
      }
 

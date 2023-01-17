@@ -5,9 +5,9 @@ namespace dnj\Invoice\Models;
 use dnj\Currency\Contracts\IExchangeManager;
 use dnj\Currency\Models\Currency;
 use dnj\Invoice\Contracts\IInvoice;
-use dnj\Invoice\Contracts\InvoiceStatus;
-use dnj\Invoice\Contracts\PaymentStatus;
 use dnj\Invoice\Database\Factories\InvoiceFactory;
+use dnj\Invoice\Enums\InvoiceStatus;
+use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Number\Contracts\INumber;
 use dnj\Number\Laravel\Casts\Number as NumberCast;
 use dnj\Number\Number;
@@ -160,7 +160,6 @@ class Invoice extends Model implements IInvoice
             $amountInSameCurrency = $exchange->convert($product->getTotalAmount(), $this->getCurrencyId(), $product->getCurrencyId(), true);
             $result = $result->add($amountInSameCurrency);
         }
-        dd($result);
         $this->amount = $result;
     }
 

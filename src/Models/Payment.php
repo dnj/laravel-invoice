@@ -4,8 +4,8 @@ namespace dnj\Invoice\Models;
 
 use dnj\Account\Models\Transaction;
 use dnj\Invoice\Contracts\IPayment;
-use dnj\Invoice\Contracts\PaymentStatus;
 use dnj\Invoice\Database\Factories\PaymentFactory;
+use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Number\Contracts\INumber;
 use dnj\Number\Laravel\Casts\Number;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,10 +17,11 @@ class Payment extends Model implements IPayment
     protected $casts = [
         'amount' => Number::class,
         'meta' => 'array',
+		'status' => PaymentStatus::class
     ];
 
     public $guarded = [];
-    protected $table = 'invoice_payments';
+    protected $table = 'invoices_payments';
 
     public function invoice()
     {
@@ -86,4 +87,8 @@ class Payment extends Model implements IPayment
     {
         return PaymentFactory::new();
     }
+	
+	public function getCurrencyId (): int {
+		return $this->currency_id;
+	}
 }
