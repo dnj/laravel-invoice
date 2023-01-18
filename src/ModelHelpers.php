@@ -23,11 +23,6 @@ trait ModelHelpers
         return $userTable;
     }
 
-    protected function getCurrencyTable(): string
-    {
-        return (new Currency())->getTable();
-    }
-
     protected function getFloatScale(): int
     {
         return config('currency.float_scale', 10);

@@ -15,7 +15,7 @@
              $table->id();
              $table->string('title', 255);
              $table->foreignId('invoice_id')->constrained('invoices')->cascadeOnDelete();
-             $table->foreignId('currency_id');
+             $table->foreignId('currency_id')->constrained('currencies');
              $table->timestamps();
              $table->decimal('price', 10 + $floatScale, $floatScale);
              $table->decimal('discount', 10 + $floatScale, $floatScale)->nullable();

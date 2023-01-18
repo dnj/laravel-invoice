@@ -15,7 +15,7 @@
              $table->id();
              $table->string('title', 255);
              $table->foreignId('user_id');
-             $table->foreignId('currency_id')->constrained($this->getCurrencyTable());
+             $table->foreignId('currency_id')->constrained('currencies');
              $table->timestamps();
              $table->decimal('amount', 10 + $floatScale, $floatScale)->nullable();
              $table->json('meta')->nullable();
