@@ -48,11 +48,11 @@ class InvoiceFactory extends Factory
         ]);
     }
 
-    public function withStatus(InvoiceStatus $status,Carbon $paid_at = null)
+    public function withStatus(InvoiceStatus $status, Carbon $paid_at = null)
     {
         return $this->state(fn () => [
             'status' => $status,
-			'paid_at' => $paid_at
+            'paid_at' => $paid_at,
         ]);
     }
 
@@ -100,7 +100,7 @@ class InvoiceFactory extends Factory
 
     public function paid(Carbon $paid_at)
     {
-        return $this->withStatus(InvoiceStatus::PAID,$paid_at);
+        return $this->withStatus(InvoiceStatus::PAID, $paid_at);
     }
 
     public function unPaid()

@@ -2,7 +2,6 @@
 
 namespace dnj\Invoice\Contracts;
 
-use dnj\Currency\Models\Currency;
 use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Number\Contracts\INumber;
 
@@ -43,7 +42,7 @@ interface IInvoiceManager
      */
     public function merge(array $invoiceIds, array $localizedDetails): IInvoice;
 
-    public function addPaymentToInvoice(int $invoiceId, string $type, INumber $amount, PaymentStatus $status, ?array $meta,int $currencyId): IPayment;
+    public function addPaymentToInvoice(int $invoiceId, string $type, INumber $amount, PaymentStatus $status, ?array $meta, int $currencyId): IPayment;
 
     public function approvePayment(int $paymentId): IPayment;
 

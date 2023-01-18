@@ -17,7 +17,7 @@ class Payment extends Model implements IPayment
     protected $casts = [
         'amount' => Number::class,
         'meta' => 'array',
-		'status' => PaymentStatus::class
+        'status' => PaymentStatus::class,
     ];
 
     public $guarded = [];
@@ -87,8 +87,9 @@ class Payment extends Model implements IPayment
     {
         return PaymentFactory::new();
     }
-	
-	public function getCurrencyID (): int {
-		return $this->currency_id;
-	}
+
+    public function getCurrencyID(): int
+    {
+        return $this->currency_id;
+    }
 }

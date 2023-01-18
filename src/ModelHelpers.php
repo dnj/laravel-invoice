@@ -2,8 +2,6 @@
 
 namespace dnj\Invoice;
 
-use dnj\Currency\Models\Currency;
-
 trait ModelHelpers
 {
     protected function getUserModel(): ?string

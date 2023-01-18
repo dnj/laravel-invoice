@@ -20,8 +20,8 @@
              $table->decimal('amount', 10 + $floatScale, $floatScale)->nullable();
              $table->json('meta')->nullable();
              $table->dateTime('paid_at')->nullable();
-             $table->enum('status',['paid','unpaid'])->default('unpaid');
-			 
+             $table->enum('status', ['paid', 'unpaid'])->default('unpaid');
+
              $userTable = $this->getUserTable();
              if ($userTable) {
                  $table->foreign('user_id')
