@@ -15,6 +15,7 @@
              $table->id();
              $table->foreignId('invoice_id')->constrained('invoices')->cascadeOnDelete();
              $table->foreignId('transaction_id')->nullable()->constrained('transactions');
+			 $table->foreignId('currency_id')->constrained($this->getCurrencyTable());
              $table->timestamps();
              $table->string('method');
              $table->decimal('amount', 10 + $floatScale, $floatScale);

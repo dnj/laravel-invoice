@@ -10,6 +10,7 @@ interface IPayment
     public function getID(): int;
 
     public function getInvoiceID(): int;
+	public function getCurrencyID(): int;
 
     public function getTransactionId(): ?int;
 

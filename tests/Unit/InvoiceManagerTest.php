@@ -8,6 +8,7 @@ use dnj\Invoice\Enums\InvoiceStatus;
 use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Invoice\Exceptions\AmountInvoiceMismatchException;
 use dnj\Invoice\Exceptions\CurrencyMismatchException;
+use dnj\Invoice\Exceptions\FinishedInvoicePaymentsException;
 use dnj\Invoice\Exceptions\InvalidInvoiceStatusException;
 use dnj\Invoice\Exceptions\InvoiceUserMismatchException;
 use dnj\Invoice\Models\Invoice;
@@ -16,6 +17,7 @@ use dnj\Invoice\Models\Product;
 use dnj\Invoice\Tests\Models\User;
 use dnj\Invoice\Tests\TestCase;
 use dnj\Invoice\Tests\Unit\Concerns\TestingInvoice;
+use dnj\Number\Number;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class InvoiceManagerTest extends TestCase {
@@ -72,9 +74,11 @@ class InvoiceManagerTest extends TestCase {
 						   ->withInvoice($invoice)
 						   ->create();
 		Product::factory()
-						   ->withInvoice($invoice)
-						   ->create();
-		$EUR = Currency::factory()->asEUR()->create();
+			   ->withInvoice($invoice)
+			   ->create();
+		$EUR = Currency::factory()
+					   ->asEUR()
+					   ->create();
 		$data = [
 			'title' => 'update invoice one' ,
 			'user_id' => $user->id ,
@@ -85,15 +89,27 @@ class InvoiceManagerTest extends TestCase {
 			'products' => [
 				[
 					'id' => $product1->id ,
+					'title' => 'this is a title ' . $product1->id ,
 					'price' => 125.00 ,
 					'discount' => 100.00 ,
 					'count' => 2 ,
+					'currencyId' => $EUR->getID() ,
+					'meta' => [ "key_meta" => 'value_meta' ] ,
+					'distributionPlan' => [ "key1" => 'value1' ] ,
+					'distribution' => [ "key" => 'value' ] ,
+					'description' => "this is a test" ,
 				] ,
 				[
 					'id' => $product2->id ,
+					'title' => 'this is a title ' . $product2->id ,
 					'price' => 325.00 ,
 					'discount' => 0.00 ,
 					'count' => 1 ,
+					'currencyId' => $EUR->getID() ,
+					'meta' => [ "key_meta" => 'value_meta' ] ,
+					'distributionPlan' => [ "key1" => 'value1' ] ,
+					'distribution' => [ "key" => 'value' ] ,
+					'description' => "this is a test" ,
 				] ,
 				[
 					'title' => 'add new product' ,
@@ -335,15 +351,27 @@ class InvoiceManagerTest extends TestCase {
 		$invoice = Invoice::factory()
 						  ->withAmount(1000000)
 						  ->create();
+		$user = User::factory()
+					->create();
 		Payment::factory()
-			->withAmount(200)
-			->withStatus(PaymentStatus::PENDING)
-			->withInvoice($invoice)
-			->create();
+			   ->withAmount(200000)
+			   ->withStatus(PaymentStatus::PENDING)
+			   ->withInvoice($invoice)
+			   ->create();
+		Payment::factory()
+			   ->withAmount(200000)
+			   ->withStatus(PaymentStatus::APPROVED)
+			   ->withInvoice($invoice)
+			   ->withEUR()
+			   ->create();
+		$paidAmount = Number::fromInt(200000);
+		$USD = Currency::factory()
+					   ->asUSD()
+					   ->create();
 		$payment = $this->getInvoiceManager()
-						->addPaymentToInvoice($invoice->getID() , 'online' , $invoice->getAmount() , PaymentStatus::PENDING , [
+						->addPaymentToInvoice($invoice->getID() , 'online' , $paidAmount , PaymentStatus::PENDING , [
 							'key' => 'value' ,
-						]);
+						] ,                   $USD->getID());
 		$this->assertSame($payment->getInvoiceID() , $invoice->getID());
 		$this->expectException(InvalidInvoiceStatusException::class);
 		$invoice->update([
@@ -352,38 +380,100 @@ class InvoiceManagerTest extends TestCase {
 		$this->getInvoiceManager()
 			 ->addPaymentToInvoice($invoice->getID() , 'online' , $invoice->getAmount() , PaymentStatus::PENDING , [
 				 'key' => 'value' ,
-			 ]);
+			 ] ,                   $USD->getID());
 	}
 	
 	/**
-	 * Testing approve payment.
+	 * Testing add payment to invoice Mismatch Amount
+	 */
+	public function testAddPaymentToInvoiceMismatchAmount (): void {
+		$invoice = Invoice::factory()
+						  ->withAmount(1000000)
+						  ->create();
+		Payment::factory()
+			   ->withAmount(200000)
+			   ->withStatus(PaymentStatus::PENDING)
+			   ->withInvoice($invoice)
+			   ->create();
+		Payment::factory()
+			   ->withAmount(200000)
+			   ->withStatus(PaymentStatus::APPROVED)
+			   ->withInvoice($invoice)
+			   ->withEUR()
+			   ->create();
+		$paidAmount = Number::fromInt(1000000);
+		$USD = Currency::factory()
+					   ->asUSD()
+					   ->create();
+		$this->expectException(AmountInvoiceMismatchException::class);
+		$this->getInvoiceManager()
+			 ->addPaymentToInvoice($invoice->getID() , 'online' , $paidAmount , PaymentStatus::PENDING , [
+				 'key' => 'value' ,
+			 ] ,                   $USD->getID());
+	}
+	
+	/**
+	 * Testing add payment to invoice when Finished payments
+	 */
+	public function testAddPaymentToInvoiceFinishedPayment (): void {
+		$invoice = Invoice::factory()
+						  ->withAmount(1000000)
+						  ->create();
+		Payment::factory()
+			   ->withAmount(400000)
+			   ->withStatus(PaymentStatus::PENDING)
+			   ->withInvoice($invoice)
+			   ->create();
+		Payment::factory()
+			   ->withAmount(600000)
+			   ->withStatus(PaymentStatus::APPROVED)
+			   ->withInvoice($invoice)
+			   ->withEUR()
+			   ->create();
+		$paidAmount = Number::fromInt(1000000);
+		$USD = Currency::factory()
+					   ->asUSD()
+					   ->create();
+		$this->expectException(FinishedInvoicePaymentsException::class);
+		$this->getInvoiceManager()
+			 ->addPaymentToInvoice($invoice->getID() , 'online' , $paidAmount , PaymentStatus::PENDING , [
+				 'key' => 'value' ,
+			 ] ,                   $USD->getID());
+	}
+	
+	/**
+	 * Testing  payment that is pending.
 	 */
 	public function testApprovePayment (): void {
 		$invoice = Invoice::factory()
-						  ->withAmount(10000)
+						  ->withAmount(1000)
 						  ->create();
 		$payment = Payment::factory()
-						  ->withAmount(10000)
+						  ->withAmount(200)
 						  ->withInvoice($invoice)
 						  ->create();
 		$response = $this->getInvoiceManager()
 						 ->approvePayment($payment->getID());
 		$this->assertSame($response->getStatus() , PaymentStatus::APPROVED);
+		$payment->update([
+							 'status' => PaymentStatus::APPROVED ,
+						 ]);
 		$this->expectException(ModelNotFoundException::class);
 		$this->getInvoiceManager()
 			 ->approvePayment(11);
 	}
 	
 	/**
-	 * testing approve payment invalid status.
+	 * Testing payment approved invalid status.
 	 */
 	public function testApprovePaymentInvalidStatus (): void {
 		$invoice = Invoice::factory()
-						  ->paid()
+						  ->withAmount(1000)
 						  ->create();
 		$payment = Payment::factory()
-						  ->withAmount(10000)
+						  ->withAmount(200)
 						  ->withInvoice($invoice)
+						  ->withStatus(PaymentStatus::APPROVED)
 						  ->create();
 		$this->expectException(InvalidInvoiceStatusException::class);
 		$this->getInvoiceManager()
@@ -391,9 +481,33 @@ class InvoiceManagerTest extends TestCase {
 	}
 	
 	/**
+	 * Testing payment approved with invoice paid
+	 */
+	public function testApprovePaymentWithInvoicePaid (): void {
+		$invoice = Invoice::factory()
+						  ->withAmount(1000)
+						  ->create();
+		Payment::factory()
+			   ->withAmount(400)
+			   ->withInvoice($invoice)
+			   ->withStatus(PaymentStatus::APPROVED)
+			   ->create();
+		$payment = Payment::factory()
+						  ->withAmount(600)
+						  ->withInvoice($invoice)
+						  ->create();
+		$response = $this->getInvoiceManager()
+						 ->approvePayment($payment->getID());
+		$this->assertSame($response->getStatus() , PaymentStatus::APPROVED);
+		$this->assertSame($response->invoice->getStatus() , InvoiceStatus::PAID);
+		$this->assertSame($response->invoice->paid_at->toDateString() , Carbon::now()
+																			  ->toDateString());
+	}
+	
+	/**
 	 *Testing approve payment amount mismatch.
 	 */
-	public function testApprovePaymentAmountMismatch (): void {
+	public function tesApprovePaymentAmountMismatch (): void {
 		$invoice = Invoice::factory()
 						  ->withAmount(1000)
 						  ->create();
@@ -418,8 +532,8 @@ class InvoiceManagerTest extends TestCase {
 		$response = $this->getInvoiceManager()
 						 ->rejectPayment($payment->getID());
 		$this->assertSame($response->getStatus() , PaymentStatus::REJECTED);
-		$invoice->update([
-							 'status' => InvoiceStatus::PAID ,
+		$payment->update([
+							 'status' => PaymentStatus::APPROVED ,
 						 ]);
 		$this->expectException(InvalidInvoiceStatusException::class);
 		$this->getInvoiceManager()

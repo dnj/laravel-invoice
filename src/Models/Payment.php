@@ -88,7 +88,7 @@ class Payment extends Model implements IPayment
         return PaymentFactory::new();
     }
 	
-	public function getCurrencyId (): int {
+	public function getCurrencyID (): int {
 		return $this->currency_id;
 	}
 }

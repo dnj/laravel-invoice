@@ -11,6 +11,7 @@ use dnj\Invoice\Enums\InvoiceStatus;
 use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Invoice\Exceptions\AmountInvoiceMismatchException;
 use dnj\Invoice\Exceptions\CurrencyMismatchException;
+use dnj\Invoice\Exceptions\FinishedInvoicePaymentsException;
 use dnj\Invoice\Exceptions\InvalidInvoiceStatusException;
 use dnj\Invoice\Exceptions\InvoiceUserMismatchException;
 use dnj\Invoice\Models\Invoice;
@@ -18,7 +19,6 @@ use dnj\Invoice\Models\Payment;
 use dnj\Invoice\Models\Product;
 use dnj\Invoice\traits\ProductBuilder;
 use dnj\Number\Contracts\INumber;
-use dnj\Number\Number;
 use Illuminate\Support\Facades\DB;
 
 class InvoiceManager implements IInvoiceManager {
@@ -26,17 +26,18 @@ class InvoiceManager implements IInvoiceManager {
 	
 	public function create ( int $userId , int $currencyId , array $products , array $localizedDetails , ?array $meta ): IInvoice {
 		$products = $this->buliderInvoiceProducts($products);
-		$amount = $this->recalculateTotalAmount($products);
+		$totalAmount = $this->recalculateTotalAmount($products);
 		$invoice = new Invoice();
 		$invoice->user_id = $userId;
 		$invoice->currency_id = $currencyId;
 		$invoice->meta = $meta;
 		$invoice->title = $localizedDetails[ 'title' ];
 		$invoice->status = InvoiceStatus::UNPAID;
-		$invoice->amount = $amount;
+		$invoice->amount = $totalAmount;
 		$invoice->save();
 		$invoice->products()
 				->createMany($products);
+		
 		return $invoice;
 	}
 	
@@ -72,8 +73,7 @@ class InvoiceManager implements IInvoiceManager {
 			}
 			$invoice->save();
 			$invoice->update([
-								 'amount' => Number::fromInt($invoice->products->sum('total_amount'))
-												   ->getValue() ,
+								 'amount' => $invoice->calculatedTotalAmountProducts()
 							 ]);
 			
 			return $invoice;
@@ -200,50 +200,63 @@ class InvoiceManager implements IInvoiceManager {
 		return $invoice;
 	}
 	
-	public function addPaymentToInvoice ( int $invoiceId , string $type , INumber $amount , PaymentStatus $status , ?array $meta ): IPayment {
+	public function addPaymentToInvoice ( int $invoiceId , string $type , INumber $amount , PaymentStatus $status , ?array $meta , int $currencyId ): IPayment {
 		$invoice = $this->getInvoiceById($invoiceId);
 		if ( InvoiceStatus::PAID == $invoice->getStatus() ) {
 			throw new InvalidInvoiceStatusException();
 		}
-		
-		
-		$payment_total_amount = $invoice->getPaidAmount();
-		if ( $amount > $payment_total_amount ) {
+		$totalAmount = $invoice->getAmount()
+							   ->sub($invoice->getTotalPaidAmount());
+		if ( $totalAmount->getValue() == 0 ) {
+			throw new FinishedInvoicePaymentsException();
+		}
+		if ( $amount > $totalAmount ) {
 			throw new AmountInvoiceMismatchException();
 		}
-		if ($payment_total_amount != 0) {
-			$payment = $invoice->payments()
-							   ->create([
-											'method' => $type ,
-											'amount' => $amount ,
-											'meta' => $meta ,
-											'status' => $status ,
-										]);
-			
-			return $payment;
-		}
+
 		
+		return $invoice->payments()
+					   ->create([
+									'method' => $type ,
+									'amount' => $amount ,
+									'currency_id' => $currencyId ,
+									'meta' => $meta ,
+									'status' => $status ,
+								]);
 	}
 	
 	public function approvePayment ( int $paymentId ): IPayment {
 		$payment = Payment::query()
 						  ->findOrFail($paymentId);
-		if ( InvoiceStatus::PAID == $payment->invoice->getStatus() ) {
+		if ( PaymentStatus::APPROVED == $payment->getStatus() ) {
 			throw new InvalidInvoiceStatusException();
 		}
-		$payment->invoice->update([
-									  'status' => InvoiceStatus::PAID ,
-									  'paid_at' => Carbon::now()
-									  //'paid_amount' => $payment->getAmount(),
-								  ]);
+		$payment->update([
+							 'status' => PaymentStatus::APPROVED ,
+						 ]);
+		$this->paidInvoice($payment->invoice);
 		
 		return $payment;
+	}
+	
+	private function paidInvoice ( Invoice $invoice ) {
+		$totalCountInvoicePayments = $invoice->payments()
+											 ->count();
+		$totalCountApprovedPayments = $invoice->payments()
+											  ->where('status' , PaymentStatus::APPROVED)
+											  ->count();
+		if ( $totalCountInvoicePayments == $totalCountApprovedPayments ) {
+			$invoice->update([
+								 'paid_at' => Carbon::now() ,
+								 'status' => InvoiceStatus::PAID ,
+							 ]);
+		}
 	}
 	
 	public function rejectPayment ( int $paymentId ): IPayment {
 		$payment = Payment::query()
 						  ->findOrFail($paymentId);
-		if ( InvoiceStatus::PAID == $payment->invoice ) {
+		if ( PaymentStatus::APPROVED == $payment->getStatus() ) {
 			throw new InvalidInvoiceStatusException();
 		}
 		$payment->update([
