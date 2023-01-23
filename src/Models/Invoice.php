@@ -5,23 +5,34 @@ namespace dnj\Invoice\Models;
 use dnj\Currency\Contracts\IExchangeManager;
 use dnj\Currency\Models\Currency;
 use dnj\Invoice\Contracts\IInvoice;
-use dnj\Invoice\Contracts\InvoiceStatus;
-use dnj\Invoice\Contracts\PaymentStatus;
+use dnj\Invoice\Database\Factories\InvoiceFactory;
+use dnj\Invoice\Distributor;
+use dnj\Invoice\Enums\InvoiceStatus;
+use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Number\Contracts\INumber;
 use dnj\Number\Laravel\Casts\Number as NumberCast;
 use dnj\Number\Number;
-use Exception;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Invoice extends Model implements IInvoice
 {
+    use HasFactory;
+
     protected $casts = [
         'amount' => NumberCast::class,
         'status' => InvoiceStatus::class,
         'meta' => 'array',
     ];
+
+    protected $attributes = [
+        'amount' => 0,
+    ];
+
+    protected $fillable = ['title', 'user_id', 'meta', 'currency_id'];
+    protected $table = 'invoices';
 
     public function products()
     {
@@ -37,7 +48,7 @@ class Invoice extends Model implements IInvoice
     {
         $model = $this->getUserModel();
         if (null === $model) {
-            throw new Exception('No user model is configured under account.user_model config');
+            throw new \Exception('No user model is configured under account.user_model config');
         }
 
         return $this->belongsTo($model);
@@ -150,17 +161,48 @@ class Invoice extends Model implements IInvoice
          * @var IExchangeManager
          */
         $exchange = app(IExchangeManager::class);
-
         $result = Number::fromInput(0);
         foreach ($this->getProducts() as $product) {
             $amountInSameCurrency = $exchange->convert($product->getTotalAmount(), $this->getCurrencyId(), $product->getCurrencyId(), true);
             $result = $result->add($amountInSameCurrency);
         }
+        if ($this->amount !== null and $this->amount->eq($result)) {
+            return;
+        }
         $this->amount = $result;
+        $this->save();
+    }
+
+    public function checkIfItsJustPaid(): void
+    {
+        if (InvoiceStatus::UNPAID != $this->status) {
+            return;
+        }
+        if (!$this->getUnpaidAmount(false)->eq(0)) {
+            return;
+        }
+        $this->status = InvoiceStatus::PAID;
+        $this->paid_at = now();
+        $this->save();
+        $this->onPay();
+    }
+
+    protected function onPay(): void
+    {
+        /**
+         * @var Distributor
+         */
+        $distributor = app(Distributor::class);
+        $distributor->distributeInvoice($this);
     }
 
     public function getTitle(): string
     {
         return $this->title;
+    }
+
+    protected static function newFactory()
+    {
+        return InvoiceFactory::new();
     }
 }

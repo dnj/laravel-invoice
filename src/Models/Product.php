@@ -1,20 +1,28 @@
 <?php
 
-namespace dnj\INovice\Models;
+namespace dnj\Invoice\Models;
 
+use dnj\Invoice\Casts\DistributionPlan;
 use dnj\Invoice\Contracts\IProduct;
-use dnj\Invoice\Models\Invoice;
+use dnj\Invoice\Database\Factories\ProductFactory;
 use dnj\Number\Contracts\INumber;
 use dnj\Number\Laravel\Casts\Number;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Product extends Model implements IProduct
 {
+    use HasFactory;
+
     protected $casts = [
         'price' => Number::class,
         'discount' => Number::class,
         'meta' => 'array',
+        'distribution_plan' => DistributionPlan::class,
+        'distribution' => 'array',
     ];
+    protected $guarded = [];
+    protected $table = 'invoices_products';
 
     public function invoice()
     {
@@ -58,7 +66,7 @@ class Product extends Model implements IProduct
 
     public function getTotalAmount(): INumber
     {
-        return $this->getPrice()->mul($this->getCount())->sub($this->getDiscount());
+        return $this->getPrice()->sub($this->getDiscount())->mul($this->getCount());
     }
 
     /**
@@ -66,7 +74,7 @@ class Product extends Model implements IProduct
      */
     public function getDistributionPlan(): array
     {
-        return $this->distributionPlan;
+        return $this->distribution_plan;
     }
 
     public function getDistribution(): ?array
@@ -97,5 +105,10 @@ class Product extends Model implements IProduct
     public function getDescription(): string
     {
         return $this->description;
+    }
+
+    protected static function newFactory()
+    {
+        return ProductFactory::new();
     }
 }

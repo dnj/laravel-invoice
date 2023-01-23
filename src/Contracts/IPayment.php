@@ -2,6 +2,7 @@
 
 namespace dnj\Invoice\Contracts;
 
+use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Number\Contracts\INumber;
 
 interface IPayment
@@ -9,6 +10,8 @@ interface IPayment
     public function getID(): int;
 
     public function getInvoiceID(): int;
+
+    public function getCurrencyID(): int;
 
     public function getTransactionId(): ?int;
 

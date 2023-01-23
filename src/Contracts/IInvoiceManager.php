@@ -41,16 +41,11 @@ interface IInvoiceManager
      */
     public function merge(array $invoiceIds, array $localizedDetails): IInvoice;
 
-    /**
-     * @param int[][]
-     *
-     * @return IInvoice[]
-     */
-    public function split(array $invoiceIds): array;
+    public function addPaymentToInvoice(int $invoiceId, string $type, int $currencyId, INumber $amount, ?array $meta): IPayment;
 
-    public function addPaymentToInvoice(int $invoiceId, string $type, INumber $amount, PaymentStatus $status, ?array $meta): IPayment;
-
-    public function approvePayment(int $paymentId): IPayment;
+    public function approvePayment(int $paymentId, int $transactionId): IPayment;
 
     public function rejectPayment(int $paymentId): IPayment;
+
+    public function getInvoiceById(int $invoiceId): IInvoice;
 }
