@@ -15,7 +15,7 @@
 	"require": {
 		"php": "^8.1",
 		"dnj/laravel-account": "dev-master",
-		"dnj/laravel-currency": "^1.0.1"
+		"dnj/laravel-currency": "^1.0.2"
 	},
 	"minimum-stability": "dev",
 	"prefer-stable": true,

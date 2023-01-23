@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d475ee229a105b05e86a30a3fc3d4bc4",
+    "content-hash": "f9e510c6aa67842f106fe5fca8895640",
     "packages": [
         {
             "name": "brick/math",
@@ -143,12 +143,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/dnj/laravel-account.git",
-                "reference": "d514ecbb2923c2ecb62f094c1d98bb6007c7da43"
+                "reference": "ebbe776604b39c5f5e728a758d375fc7c707f031"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/dnj/laravel-account/zipball/d514ecbb2923c2ecb62f094c1d98bb6007c7da43",
-                "reference": "d514ecbb2923c2ecb62f094c1d98bb6007c7da43",
+                "url": "https://api.github.com/repos/dnj/laravel-account/zipball/ebbe776604b39c5f5e728a758d375fc7c707f031",
+                "reference": "ebbe776604b39c5f5e728a758d375fc7c707f031",
                 "shasum": ""
             },
             "require": {
@@ -186,20 +186,20 @@
                 "issues": "https://github.com/dnj/laravel-account/issues",
                 "source": "https://github.com/dnj/laravel-account/tree/master"
             },
-            "time": "2023-01-15T14:42:45+00:00"
+            "time": "2023-01-21T08:16:41+00:00"
         },
         {
             "name": "dnj/laravel-currency",
-            "version": "v1.0.1",
+            "version": "v1.0.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/dnj/laravel-currency.git",
-                "reference": "677887ccafde1150b2c210bfa9c1fa6485ad34c4"
+                "reference": "b3d2d0241093dba5d203c96ec2466e970c6a3028"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/dnj/laravel-currency/zipball/677887ccafde1150b2c210bfa9c1fa6485ad34c4",
-                "reference": "677887ccafde1150b2c210bfa9c1fa6485ad34c4",
+                "url": "https://api.github.com/repos/dnj/laravel-currency/zipball/b3d2d0241093dba5d203c96ec2466e970c6a3028",
+                "reference": "b3d2d0241093dba5d203c96ec2466e970c6a3028",
                 "shasum": ""
             },
             "require": {
@@ -231,9 +231,9 @@
             ],
             "support": {
                 "issues": "https://github.com/dnj/laravel-currency/issues",
-                "source": "https://github.com/dnj/laravel-currency/tree/v1.0.1"
+                "source": "https://github.com/dnj/laravel-currency/tree/v1.0.2"
             },
-            "time": "2023-01-08T13:01:33+00:00"
+            "time": "2023-01-22T20:52:41+00:00"
         },
         {
             "name": "dnj/number",
@@ -1238,16 +1238,16 @@
         },
         {
             "name": "league/flysystem",
-            "version": "3.12.1",
+            "version": "3.12.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/thephpleague/flysystem.git",
-                "reference": "b934123c1f11ada6363d057d691e3065fa6d6d49"
+                "reference": "f6377c709d2275ed6feaf63e44be7a7162b0e77f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/thephpleague/flysystem/zipball/b934123c1f11ada6363d057d691e3065fa6d6d49",
-                "reference": "b934123c1f11ada6363d057d691e3065fa6d6d49",
+                "url": "https://api.github.com/repos/thephpleague/flysystem/zipball/f6377c709d2275ed6feaf63e44be7a7162b0e77f",
+                "reference": "f6377c709d2275ed6feaf63e44be7a7162b0e77f",
                 "shasum": ""
             },
             "require": {
@@ -1309,7 +1309,7 @@
             ],
             "support": {
                 "issues": "https://github.com/thephpleague/flysystem/issues",
-                "source": "https://github.com/thephpleague/flysystem/tree/3.12.1"
+                "source": "https://github.com/thephpleague/flysystem/tree/3.12.2"
             },
             "funding": [
                 {
@@ -1325,7 +1325,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2023-01-06T16:34:48+00:00"
+            "time": "2023-01-19T12:02:19+00:00"
         },
         {
             "name": "league/mime-type-detection",
@@ -8488,5 +8488,5 @@
         "php": "^8.1"
     },
     "platform-dev": [],
-    "plugin-api-version": "2.3.0"
+    "plugin-api-version": "2.2.0"
 }

@@ -4,6 +4,9 @@ namespace dnj\Invoice\Contracts;
 
 use dnj\Number\Contracts\INumber;
 
+/**
+ * @phpstan-type DistributionPlan array<int,INumber>
+ */
 interface IProduct
 {
     public function getID(): int;

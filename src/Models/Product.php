@@ -2,6 +2,7 @@
 
 namespace dnj\Invoice\Models;
 
+use dnj\Invoice\Casts\DistributionPlan;
 use dnj\Invoice\Contracts\IProduct;
 use dnj\Invoice\Database\Factories\ProductFactory;
 use dnj\Number\Contracts\INumber;
@@ -17,7 +18,7 @@ class Product extends Model implements IProduct
         'price' => Number::class,
         'discount' => Number::class,
         'meta' => 'array',
-        'distribution_plan' => 'array',
+        'distribution_plan' => DistributionPlan::class,
         'distribution' => 'array',
     ];
     protected $guarded = [];
@@ -65,9 +66,7 @@ class Product extends Model implements IProduct
 
     public function getTotalAmount(): INumber
     {
-        return $this->getPrice()
-                    ->mul($this->getCount())
-                    ->sub($this->getDiscount());
+        return $this->getPrice()->sub($this->getDiscount())->mul($this->getCount());
     }
 
     /**
@@ -75,7 +74,7 @@ class Product extends Model implements IProduct
      */
     public function getDistributionPlan(): array
     {
-        return $this->distributionPlan;
+        return $this->distribution_plan;
     }
 
     public function getDistribution(): ?array

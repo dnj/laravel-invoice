@@ -6,6 +6,7 @@ use dnj\Currency\Contracts\IExchangeManager;
 use dnj\Currency\Models\Currency;
 use dnj\Invoice\Contracts\IInvoice;
 use dnj\Invoice\Database\Factories\InvoiceFactory;
+use dnj\Invoice\Distributor;
 use dnj\Invoice\Enums\InvoiceStatus;
 use dnj\Invoice\Enums\PaymentStatus;
 use dnj\Number\Contracts\INumber;
@@ -25,7 +26,12 @@ class Invoice extends Model implements IInvoice
         'status' => InvoiceStatus::class,
         'meta' => 'array',
     ];
-    protected $guarded = [];
+
+    protected $attributes = [
+        'amount' => 0,
+    ];
+
+    protected $fillable = ['title', 'user_id', 'meta', 'currency_id'];
     protected $table = 'invoices';
 
     public function products()
@@ -100,23 +106,6 @@ class Invoice extends Model implements IInvoice
         return $result;
     }
 
-    public function getTotalPaidAmount(): INumber
-    {
-        $total = 0;
-        $payments = $this->payments()
-                         ->whereIn('status', [
-                             PaymentStatus::APPROVED,
-                             PaymentStatus::PENDING,
-                         ])
-                         ->get();
-        foreach ($payments as $payment) {
-            $total += $payment->getAmount()
-                              ->getValue();
-        }
-
-        return Number::fromInt($total);
-    }
-
     public function getUnpaidAmount(bool $includePendingPayments = true): INumber
     {
         $total = $this->getAmount();
@@ -177,17 +166,34 @@ class Invoice extends Model implements IInvoice
             $amountInSameCurrency = $exchange->convert($product->getTotalAmount(), $this->getCurrencyId(), $product->getCurrencyId(), true);
             $result = $result->add($amountInSameCurrency);
         }
+        if ($this->amount !== null and $this->amount->eq($result)) {
+            return;
+        }
         $this->amount = $result;
+        $this->save();
     }
 
-    public function calculatedTotalAmountProducts(): INumber
+    public function checkIfItsJustPaid(): void
     {
-        $total = 0;
-        foreach ($this->getProducts() as $product) {
-            $total += $product->getTotalAmount()->getValue();
+        if (InvoiceStatus::UNPAID != $this->status) {
+            return;
         }
+        if (!$this->getUnpaidAmount(false)->eq(0)) {
+            return;
+        }
+        $this->status = InvoiceStatus::PAID;
+        $this->paid_at = now();
+        $this->save();
+        $this->onPay();
+    }
 
-        return Number::fromInt($total);
+    protected function onPay(): void
+    {
+        /**
+         * @var Distributor
+         */
+        $distributor = app(Distributor::class);
+        $distributor->distributeInvoice($this);
     }
 
     public function getTitle(): string

@@ -2,10 +2,12 @@
 
 namespace dnj\Invoice\Database\Factories;
 
+use dnj\Account\Models\Account;
 use dnj\Currency\Database\Factories\CurrencyFactory;
 use dnj\Currency\Models\Currency;
 use dnj\Invoice\Models\Invoice;
 use dnj\Invoice\Models\Product;
+use dnj\Number\Contracts\INumber;
 use dnj\Number\Number;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -19,12 +21,15 @@ class ProductFactory extends Factory
             'title' => fake()->sentence(3),
             'invoice_id' => Invoice::factory(),
             'currency_id' => Currency::factory(),
-            'price' => Number::fromInt(0),
+            'price' => Number::fromInt(10),
             'discount' => Number::fromInt(0),
             'total_amount' => Number::fromInt(0),
             'count' => fake()->numberBetween($min = 1, $max = 10),
             'meta' => null,
-            'distribution_plan' => null,
+            'distribution_plan' =>  [
+                1 => Number::fromInput(3),
+                2 => Number::fromInput(30),
+            ],
             'distribution' => null,
             'description' => null,
         ];

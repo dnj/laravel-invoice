@@ -2,43 +2,36 @@
 
 namespace dnj\Invoice;
 
-use Carbon\Carbon;
-use dnj\Invoice\Contracts\IInvoice;
 use dnj\Invoice\Contracts\IInvoiceManager;
-use dnj\Invoice\Contracts\IPayment;
-use dnj\Invoice\Contracts\IProduct;
+use dnj\Invoice\Contracts\IPaymentMethod;
 use dnj\Invoice\Enums\InvoiceStatus;
 use dnj\Invoice\Enums\PaymentStatus;
-use dnj\Invoice\Exceptions\AmountInvoiceMismatchException;
 use dnj\Invoice\Exceptions\CurrencyMismatchException;
-use dnj\Invoice\Exceptions\FinishedInvoicePaymentsException;
 use dnj\Invoice\Exceptions\InvalidInvoiceStatusException;
 use dnj\Invoice\Exceptions\InvoiceUserMismatchException;
 use dnj\Invoice\Models\Invoice;
 use dnj\Invoice\Models\Payment;
 use dnj\Invoice\Models\Product;
-use dnj\Invoice\traits\ProductBuilder;
 use dnj\Number\Contracts\INumber;
+use dnj\Number\Number;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
 class InvoiceManager implements IInvoiceManager
 {
-    use ProductBuilder;
 
-    public function create(int $userId, int $currencyId, array $products, array $localizedDetails, ?array $meta): IInvoice
+    public function create(int $userId, int $currencyId, array $products, array $localizedDetails, ?array $meta): Invoice
     {
-        $products = $this->buliderInvoiceProducts($products);
-        $totalAmount = $this->recalculateTotalAmount($products);
         $invoice = new Invoice();
         $invoice->user_id = $userId;
         $invoice->currency_id = $currencyId;
         $invoice->meta = $meta;
         $invoice->title = $localizedDetails['title'];
         $invoice->status = InvoiceStatus::UNPAID;
-        $invoice->amount = $totalAmount;
         $invoice->save();
-        $invoice->products()
-                ->createMany($products);
+        $products = $invoice->products()->createMany($products);
+        $invoice->recalculateTotalAmount();
 
         return $invoice;
     }
@@ -46,241 +39,209 @@ class InvoiceManager implements IInvoiceManager
     public function delete(int $invoiceId): void
     {
         $invoice = $this->getInvoiceById($invoiceId);
-        if (InvoiceStatus::PAID == $invoice->status) {
+        if (InvoiceStatus::UNPAID != $invoice->status) {
             throw new InvalidInvoiceStatusException();
         }
         $invoice->delete();
     }
 
-    public function update(int $invoiceId, array $changes): IInvoice
+    public function update(int $invoiceId, array $changes): Invoice
     {
         $invoice = $this->getInvoiceById($invoiceId);
-        if (InvoiceStatus::PAID == $invoice->status) {
+        if (InvoiceStatus::UNPAID != $invoice->status) {
             throw new InvalidInvoiceStatusException();
         }
 
         return DB::transaction(function () use ($invoice, $changes) {
-            if (isset($changes['title'])) {
-                $invoice->title = $changes['title'];
-            }
-            if (isset($changes['user_id'])) {
-                $invoice->user_id = $changes['user_id'];
-            }
-            if (isset($changes['meta'])) {
-                $invoice->meta = $changes['meta'];
-            }
-            if (isset($changes['currencyId'])) {
-                $invoice->currency_id = $changes['currencyId'];
-            }
-            if (isset($changes['products'])) {
-                $this->updateInvoiceProduct($changes['products'], $invoice);
-            }
+            $invoice->fill($changes);
             $invoice->save();
-            $invoice->update([
-                                 'amount' => $invoice->calculatedTotalAmountProducts(),
-                             ]);
+            if (isset($changes['products'])) {
+                $refresh = false;
+                $collection = collect($changes['products']);
+                $productIds = array_column($changes['products'], 'id');
+                foreach ($invoice->products as $product) {
+                    if (!in_array($product->id, $productIds)) {
+                        $product->delete();
+                        $refresh = true;
+                        continue;
+                    }
+                    $update = $collection->first(fn ($p) => (isset($p['id']) and $p['id'] == $product->id));
+                    $product->fill($update);
+                    $product->save();
+                }
+                $invoice->products()->createMany($collection->filter(fn ($p) => !isset($p['id'])));
+                if ($refresh) {
+                    $invoice->refresh();
+                }
+            }
+            $invoice->recalculateTotalAmount();
+            $invoice->checkIfItsJustPaid();
 
             return $invoice;
         });
     }
 
-    public function addProductToInvoice(int $invoiceId, array $product): IProduct
+    public function addProductToInvoice(int $invoiceId, array $product): Product
     {
         $invoice = $this->getInvoiceById($invoiceId);
+        if (InvoiceStatus::UNPAID != $invoice->status) {
+            throw new InvalidInvoiceStatusException();
+        }
 
         return DB::transaction(function () use ($invoice, $product) {
-            $record = $invoice->products()
-                              ->create([
-                                           'title' => $product['title'],
-                                           'price' => $product['price'],
-                                           'discount' => $product['discount'],
-                                           'currency_id' => $product['currencyId'],
-                                           'count' => $product['count'],
-                                           'description' => $product['description'],
-                                           'distribution_plan' => json_encode($product['distributionPlan'], JSON_THROW_ON_ERROR),
-                                           'distribution' => json_encode($product['distribution'], JSON_THROW_ON_ERROR),
-                                           'meta' => json_encode($product['meta'], JSON_THROW_ON_ERROR),
-                                       ]);
-            $invoice->update([
-                                 'amount' => $record->getTotalAmount(),
-                             ]);
+            $record = $invoice->products()->create($product);
+            $invoice->recalculateTotalAmount();
+            $invoice->checkIfItsJustPaid();
 
             return $record;
         });
     }
 
-    public function updateProduct(int $productId, array $changes): IProduct
+    public function updateProduct(int $productId, array $changes): Product
     {
-        $product = Product::query()
-                          ->findOrFail($productId);
+        $product = Product::query()->findOrFail($productId);
+        if (InvoiceStatus::UNPAID != $product->invoice->status) {
+            throw new InvalidInvoiceStatusException();
+        }
 
         return DB::transaction(function () use ($product, $changes) {
-            if (isset($changes['title'])) {
-                $product->title = $changes['title'];
-            }
-            if (isset($changes['price'])) {
-                $product->price = $changes['price'];
-            }
-            if (isset($changes['discount'])) {
-                $product->discount = $changes['discount'];
-            }
-            if (isset($changes['count'])) {
-                $product->count = $changes['count'];
-            }
-            if (isset($changes['distributionPlan'])) {
-                $product->distribution_plan = $changes['distributionPlan'];
-            }
-            if (isset($changes['distribution'])) {
-                $product->distribution = $changes['distribution'];
-            }
-            if (isset($changes['description'])) {
-                $product->description = $changes['description'];
-            }
-            if (isset($changes['meta'])) {
-                $product->meta = $changes['meta'];
-            }
-            if (isset($changes['currencyId'])) {
-                $product->currency_id = $changes['currencyId'];
-            }
-            $product->save();
-            $product->update([
-                                 'total_amount' => $product->getTotalAmount(),
-                             ]);
+            $product->update($changes);
+            $product->invoice->recalculateTotalAmount();
+            $product->invoice->checkIfItsJustPaid();
 
             return $product;
         });
     }
 
-    public function deleteProduct(int $productId): IInvoice
+    public function deleteProduct(int $productId): Invoice
     {
-        $product = Product::query()
-                          ->findOrFail($productId);
-        $invoice = $this->getInvoiceById($product->invoice_id);
-        $product->delete();
-
-        return $invoice;
-    }
-
-    public function merge(array $invoiceIds, array $localizedDetails): IInvoice
-    {
-        $first_invoice = $this->getInvoiceById($invoiceIds[0]);
-        $second_invoice = $this->getInvoiceById($invoiceIds[1]);
-
-        return DB::transaction(function () use ($first_invoice, $second_invoice, $localizedDetails) {
-            if (InvoiceStatus::PAID == $first_invoice->getStatus()) {
-                throw new InvalidInvoiceStatusException();
-            }
-            if (InvoiceStatus::PAID == $second_invoice->getStatus()) {
-                throw new InvalidInvoiceStatusException();
-            }
-            if ($first_invoice->getUserId() != $second_invoice->getUserId()) {
-                throw new InvoiceUserMismatchException();
-            }
-            if ($first_invoice->getCurrencyId() !== $second_invoice->getCurrencyId()) {
-                throw new CurrencyMismatchException();
-            }
-
-            return $this->createInvoice($first_invoice, $second_invoice, $localizedDetails);
-        });
-    }
-
-    protected function createInvoice(Invoice $first_invoice, Invoice $second_invoice, array $localizedDetails): IInvoice
-    {
-        $invoice = new Invoice();
-        $invoice->user_id = $first_invoice->getUserId();
-        $invoice->currency_id = $first_invoice->getCurrencyId();
-        if (null != $first_invoice->getMeta() || null != $second_invoice->getMeta()) {
-            $invoice->meta = array_merge($first_invoice->getMeta() ?? [], $second_invoice->getMeta() ?? []);
-        }
-        $invoice->amount = $first_invoice->amount->getValue() + $second_invoice->amount->getValue();
-        if (isset($localizedDetails['title'])) {
-            $invoice->title = $localizedDetails['title'];
-        }
-        $invoice->save();
-        $first_invoice->products()
-                      ->update([
-                                   'invoice_id' => $invoice->getID(),
-                               ]);
-        $second_invoice->products()
-                       ->update([
-                                    'invoice_id' => $invoice->getID(),
-                                ]);
-
-        return $invoice;
-    }
-
-    public function addPaymentToInvoice(int $invoiceId, string $type, INumber $amount, PaymentStatus $status, ?array $meta, int $currencyId): IPayment
-    {
-        $invoice = $this->getInvoiceById($invoiceId);
-        if (InvoiceStatus::PAID == $invoice->getStatus()) {
+        $product = Product::query()->findOrFail($productId);
+        if (InvoiceStatus::UNPAID != $product->invoice->status) {
             throw new InvalidInvoiceStatusException();
         }
-        $totalAmount = $invoice->getAmount()
-                               ->sub($invoice->getTotalPaidAmount());
-        if (0 == $totalAmount->getValue()) {
-            throw new FinishedInvoicePaymentsException();
-        }
-        if ($amount > $totalAmount) {
-            throw new AmountInvoiceMismatchException();
-        }
+        $product->delete();
+        $product->invoice->recalculateTotalAmount();
+        $product->invoice->checkIfItsJustPaid();
 
-        return $invoice->payments()
-                       ->create([
-                                    'method' => $type,
-                                    'amount' => $amount,
-                                    'currency_id' => $currencyId,
-                                    'meta' => $meta,
-                                    'status' => $status,
-                                ]);
+        return $product->invoice;
     }
 
-    public function approvePayment(int $paymentId): IPayment
+    public function merge(array $invoiceIds, array $localizedDetails): Invoice
     {
-        $payment = Payment::query()
-                          ->findOrFail($paymentId);
-        if (PaymentStatus::APPROVED == $payment->getStatus()) {
+        if (count($invoiceIds) < 2) {
+            throw new \ArgumentCountError('merge needs more than 2 invoices');
+        }
+
+        /**
+         * @var Collection<Invoice>
+         */
+        $invoices = Invoice::query()->whereIn('id', $invoiceIds)->get();
+        $missings = [];
+        foreach ($invoiceIds as $invoiceId) {
+            $found = $invoices->contains(fn ($invoice) => $invoice->id == $invoiceId);
+            if (!$found) {
+                $missings[] = $invoiceId;
+            }
+        }
+        if ($missings) {
+            $e = new ModelNotFoundException();
+            $e->setModel(Invoice::class, $missings);
+
+            throw $e;
+        }
+
+        foreach ($invoices as $invoice) {
+            if (InvoiceStatus::UNPAID != $invoice->getStatus()) {
+                throw new InvalidInvoiceStatusException();
+            }
+            if ($invoice->getUserId() != $invoices[0]->getUserId()) {
+                throw new InvoiceUserMismatchException();
+            }
+            if ($invoice->getCurrencyId() !== $invoices[0]->getCurrencyId()) {
+                throw new CurrencyMismatchException();
+            }
+        }
+        $newInvoice = new Invoice();
+        $newInvoice->user_id = $invoices[0]->getUserId();
+        $newInvoice->currency_id = $invoices[0]->getCurrencyId();
+        $meta = ['merged-meta' => []];
+        foreach ($invoices as $invoice) {
+            $meta['merged-meta'][$invoice->getID()] = $invoice->getMeta();
+        }
+        $newInvoice->meta = $meta;
+        $newInvoice->title = $localizedDetails['title'];
+        $totalAmount = Number::fromInt(0);
+        foreach ($invoices as $invoice) {
+            $totalAmount = $totalAmount->add($invoice->amount);
+        }
+        $newInvoice->save();
+        foreach ($invoices as $invoice) {
+            $invoice->products()->update([
+                'invoice_id' => $newInvoice->getID(),
+            ]);
+            $invoice->payments()->update([
+                'invoice_id' => $newInvoice->getID(),
+            ]);
+        }
+        $newInvoice->recalculateTotalAmount();
+        $newInvoice->checkIfItsJustPaid();
+
+        return $newInvoice;
+    }
+
+    public function addPaymentToInvoice(int $invoiceId, string $type, int $currencyId, INumber $amount, ?array $meta): Payment
+    {
+        if (!is_a($type, IPaymentMethod::class, true)) {
+            throw new \TypeError('type must be a implemention of ' . IPaymentMethod::class);
+        }
+
+        $invoice = $this->getInvoiceById($invoiceId);
+        if (InvoiceStatus::UNPAID != $invoice->getStatus()) {
+            throw new InvalidInvoiceStatusException();
+        }
+        if ($invoice->getAmount()->gt($invoice->getPaidAmount(true)->add($amount))) {
+            throw new OverPaymentException($invoice->getAmount(),);
+        }
+
+        return $invoice->payments()->create([
+            'method' => $type,
+            'amount' => $amount,
+            'currency_id' => $currencyId,
+            'meta' => $meta,
+            'status' => PaymentStatus::PENDING,
+        ]);
+    }
+
+    public function approvePayment(int $paymentId, int $transactionId): Payment
+    {
+        $payment = Payment::query()->findOrFail($paymentId);
+        if (PaymentStatus::PENDING != $payment->getStatus()) {
             throw new InvalidInvoiceStatusException();
         }
         $payment->update([
-                             'status' => PaymentStatus::APPROVED,
-                         ]);
-        $this->paidInvoice($payment->invoice);
+            'transaction_id' => $transactionId,
+            'status' => PaymentStatus::APPROVED,
+        ]);
+        $payment->invoice->checkIfItsJustPaid();
 
         return $payment;
     }
 
-    private function paidInvoice(Invoice $invoice)
+    public function rejectPayment(int $paymentId): Payment
     {
-        $totalCountInvoicePayments = $invoice->payments()
-                                             ->count();
-        $totalCountApprovedPayments = $invoice->payments()
-                                              ->where('status', PaymentStatus::APPROVED)
-                                              ->count();
-        if ($totalCountInvoicePayments == $totalCountApprovedPayments) {
-            $invoice->update([
-                                 'paid_at' => Carbon::now(),
-                                 'status' => InvoiceStatus::PAID,
-                             ]);
-        }
-    }
-
-    public function rejectPayment(int $paymentId): IPayment
-    {
-        $payment = Payment::query()
-                          ->findOrFail($paymentId);
-        if (PaymentStatus::APPROVED == $payment->getStatus()) {
+        $payment = Payment::query()->findOrFail($paymentId);
+        if (PaymentStatus::PENDING != $payment->getStatus()) {
             throw new InvalidInvoiceStatusException();
         }
         $payment->update([
-                             'status' => PaymentStatus::REJECTED,
-                         ]);
+            'status' => PaymentStatus::REJECTED,
+        ]);
 
         return $payment;
     }
 
     public function getInvoiceById(int $invoiceId): Invoice
     {
-        return Invoice::query()
-                      ->findOrFail($invoiceId);
+        return Invoice::query()->findOrFail($invoiceId);
     }
 }

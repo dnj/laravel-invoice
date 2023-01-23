@@ -2,94 +2,98 @@
 
 namespace dnj\Invoice\Tests\Unit;
 
-use Carbon\Carbon;
+use dnj\Account\Contracts\ITransactionManager;
+use dnj\Account\Models\Account;
+use dnj\Account\Models\Transaction;
+use dnj\Account\TransactionManager;
 use dnj\Currency\Models\Currency;
+use dnj\Invoice\Contracts\IPaymentMethod;
 use dnj\Invoice\Enums\InvoiceStatus;
 use dnj\Invoice\Enums\PaymentStatus;
-use dnj\Invoice\Exceptions\AmountInvoiceMismatchException;
-use dnj\Invoice\Exceptions\CurrencyMismatchException;
-use dnj\Invoice\Exceptions\FinishedInvoicePaymentsException;
 use dnj\Invoice\Exceptions\InvalidInvoiceStatusException;
-use dnj\Invoice\Exceptions\InvoiceUserMismatchException;
 use dnj\Invoice\Models\Invoice;
 use dnj\Invoice\Models\Payment;
 use dnj\Invoice\Models\Product;
 use dnj\Invoice\Tests\Models\User;
 use dnj\Invoice\Tests\TestCase;
-use dnj\Invoice\Tests\Unit\Concerns\TestingInvoice;
 use dnj\Number\Number;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class InvoiceManagerTest extends TestCase
 {
-    use TestingInvoice;
-
-    /**
-     * Testing create invoice.
-     */
     public function testCreateInvoice(): void
     {
         $now = time();
-        $user = User::factory()
-                    ->create();
-        $USD = Currency::factory()
-                       ->asUSD()
-                       ->create();
-        $invoice = $this->getInvoiceManager()
-                        ->create($user->id, $USD->getID(), $this->products($USD), ['title' => 'invoice one'], []);
+        $user = User::factory()->create();
+        $USD = Currency::factory()->asUSD()->create();
+        $accounts = Account::factory(2)->create();
+        $products = [
+            [
+                'title' => 'product1',
+                'price' => 125.000,
+                'discount' => 0.00,
+                'count' => 2,
+                'currency_id' => $USD->getID(),
+                'distribution_plan' => [
+                    $accounts[0]->getID() => Number::fromInput(100),
+                    $accounts[1]->getID() => Number::fromInput(25),
+                ],
+            ],
+            [
+                'title' => 'product2',
+                'price' => 153.000,
+                'discount' => 120.000,
+                'count' => 1,
+                'currency_id' => $USD->getID(),
+                'distribution_plan' => [
+                    $accounts[0]->getID() => Number::fromInput(3),
+                    $accounts[1]->getID() => Number::fromInput(30),
+                ],
+            ],
+        ];
+        $invoice = $this->getInvoiceManager()->create($user->id, $USD->getID(), $products, ['title' => 'invoice one'], []);
         $this->assertSame($user->id, $invoice->user_id);
         $this->assertSame($USD->getID(), $invoice->currency_id);
         $this->assertSame($now, $invoice->getCreateTime());
+        $this->assertCount(2, $invoice->getProducts());
+        $this->assertSame((125 - 0) * 2 + (153 - 120) * 1, $invoice->getAmount()->getValue());
     }
 
-    /**
-     * Testing Delete invoice by Id.
-     */
     public function testDeleteInvoice(): void
     {
         $invoice = Invoice::factory()
-                          ->has(Product::factory())
-                          ->has(Payment::factory())
-                          ->create();
-        $this->getInvoiceManager()
-             ->delete($invoice->getID());
-        $this->assertTrue(true);
-        $invoice = Invoice::factory()
-                          ->paid(Carbon::now())
-                          ->create();
+            ->unpaid()
+            ->has(Product::factory())
+            ->create();
+        $this->getInvoiceManager()->delete($invoice->getID());
+        $this->assertModelMissing($invoice);
+    }
+
+    public function testDeletePaidInvoice(): void
+    {
+        $invoice = Invoice::factory()->paid()->create();
         $this->expectException(InvalidInvoiceStatusException::class);
-        $this->getInvoiceManager()
-             ->delete($invoice->getID());
-        $this->expectException(ModelNotFoundException::class);
-        $this->getInvoiceManager()
-             ->delete(11);
+        $this->getInvoiceManager()->delete($invoice->getID());
     }
 
     public function testUpdateInvoice()
     {
-        $user = User::factory()
-                    ->create();
+        $user = User::factory()->create();
+        $EUR = Currency::factory()->asEUR()->create();
+        
         $invoice = Invoice::factory()
-                          ->create();
-        $product1 = Product::factory()
-                           ->withInvoice($invoice)
-                           ->create();
-        $product2 = Product::factory()
-                           ->withInvoice($invoice)
-                           ->create();
-        Product::factory()
-               ->withInvoice($invoice)
-               ->create();
-        $EUR = Currency::factory()
-                       ->asEUR()
-                       ->create();
+            ->unpaid()
+            ->has(Product::factory(2))
+            ->create();
+        [$product1, $product2] = $invoice->products;
+        $accounts = Account::factory(2)->withCurrency($EUR)->create();
+
         $data = [
             'title' => 'update invoice one',
             'user_id' => $user->id,
             'meta' => [
                 'key1' => 'value',
             ],
-            'currencyId' => $EUR->getID(),
+            'currency_id' => $EUR->getID(),
             'products' => [
                 [
                     'id' => $product1->id,
@@ -97,22 +101,12 @@ class InvoiceManagerTest extends TestCase
                     'price' => 125.00,
                     'discount' => 100.00,
                     'count' => 2,
-                    'currencyId' => $EUR->getID(),
+                    'currency_id' => $EUR->getID(),
                     'meta' => ['key_meta' => 'value_meta'],
-                    'distributionPlan' => ['key1' => 'value1'],
-                    'distribution' => ['key' => 'value'],
-                    'description' => 'this is a test',
-                ],
-                [
-                    'id' => $product2->id,
-                    'title' => 'this is a title '.$product2->id,
-                    'price' => 325.00,
-                    'discount' => 0.00,
-                    'count' => 1,
-                    'currencyId' => $EUR->getID(),
-                    'meta' => ['key_meta' => 'value_meta'],
-                    'distributionPlan' => ['key1' => 'value1'],
-                    'distribution' => ['key' => 'value'],
+                    'distribution_plan' => [
+                        $accounts[0]->getID() => Number::fromInput(20),
+                        $accounts[1]->getID() => Number::fromInput(5),
+                    ],
                     'description' => 'this is a test',
                 ],
                 [
@@ -120,446 +114,218 @@ class InvoiceManagerTest extends TestCase
                     'price' => 300.00,
                     'discount' => 150.00,
                     'count' => 2,
-                    'currencyId' => $EUR->getID(),
+                    'distribution_plan' => [
+                        $accounts[0]->getID() => Number::fromInput(100),
+                        $accounts[1]->getID() => Number::fromInput(50),
+                    ],
+                    'currency_id' => $EUR->getID(),
                 ],
             ],
         ];
-        $response = $this->getInvoiceManager()
-                         ->update($invoice->getID(), $data);
-        $this->assertSame($EUR->getID(), $response->getCurrencyId());
-        $this->assertSame($data['meta'], $response->getMeta());
-        $this->assertSame($data['title'], $response->getTitle());
-        $this->assertSame($data['user_id'], $response->getUserId());
-        $invoice->update([
-                             'status' => InvoiceStatus::PAID->value,
-                         ]);
-        $this->expectException(InvalidInvoiceStatusException::class);
-        $this->getInvoiceManager()
-             ->update($invoice->getID(), $data);
-        $this->expectException(ModelNotFoundException::class);
-        $this->getInvoiceManager()
-             ->update(11, $data);
+        $invoice = $this->getInvoiceManager()->update($invoice->getID(), $data);
+        $this->assertSame((125 - 100) * 2 + (300 - 150) * 2, $invoice->getAmount()->getValue());
+        $this->assertSame(0, $invoice->getPaidAmount()->getValue());
+        $this->assertSame(InvoiceStatus::UNPAID, $invoice->getStatus());
+        $this->assertSame($EUR->getID(), $invoice->getCurrencyId());
+        $this->assertSame($data['meta'], $invoice->getMeta());
+        $this->assertSame($data['title'], $invoice->getTitle());
+        $this->assertSame($data['user_id'], $invoice->getUserId());
+
+        $this->assertCount(2, $invoice->products);
+        $this->assertModelExists($product1);
+        $this->assertModelMissing($product2);
+        $newProduct = $invoice->products()->whereNot('id', $product1->id)->first();
+        $this->assertSame($data['products'][1]['title'], $newProduct->title);
     }
 
     public function testAddProductToInvoice()
     {
-        $invoice = Invoice::factory()
-                          ->create();
-        $USD = Currency::factory()
-                       ->asUSD()
-                       ->create();
+        $USD = Currency::factory()->asUSD()->create();
+        $invoice = Invoice::factory()->withCurrency($USD)->create();
         $data = [
             'title' => 'product3',
             'price' => 300,
             'discount' => 50.00,
-            'currencyId' => $USD->getID(),
+            'currency_id' => $USD->getID(),
             'count' => 3,
             'description' => 'this is a test',
-            'distributionPlan' => [
+            'distribution_plan' => [
                 'key' => 'value',
-            ],
-            'distribution' => [
-                'key1' => 'value2',
             ],
             'meta' => [
                 'key2' => 'value2',
             ],
         ];
-        $product = $this->getInvoiceManager()
-                        ->addProductToInvoice($invoice->getID(), $data);
-        $this->assertSame($product->getTitle(), $product['title']);
-        $this->assertSame($product->getCount(), $product['count']);
-        $this->expectException(ModelNotFoundException::class);
-        $this->getInvoiceManager()
-             ->addProductToInvoice(11, $data);
+        $product = $this->getInvoiceManager()->addProductToInvoice($invoice->getID(), $data);
+        $this->assertSame($data['title'], $product->getTitle());
+        $this->assertSame($data['count'], $product->getCount());
     }
 
-    /**
-     * Testing update product.
-     */
-    public function testUpdateProduct(): void
+    public function testUpdateProduct()
     {
-        $product = Product::factory()
-                          ->create();
-        $EUR = $this->createEUR();
-        $data = [
-            'id' => $product->id,
-            'title' => 'product3',
+        $USD = Currency::factory()->asUSD()->create();
+        $invoice = Invoice::factory()
+            ->withCurrency($USD)
+            ->has(Product::factory(2)->withCurrency($USD))
+            ->create();
+        $product = $invoice->products[0];
+        $changes = [
+            'title' => 'new title',
             'price' => 300,
             'discount' => 50.00,
-            'count' => 3,
-            'currencyId' => $EUR->getID(),
-            'description' => 'this is a test',
-            'distributionPlan' => [
-                'key' => 'value',
-            ],
-            'distribution' => [
-                'key1' => 'value2',
-            ],
-            'meta' => [
-                'key2' => 'value2',
-            ],
+            'count' => 2,
         ];
-        $product = $this->getInvoiceManager()
-                        ->updateProduct($product->getID(), $data);
-        $this->assertSame($product->getTitle(), $product['title']);
-        $this->assertSame($product->getCount(), $product['count']);
-        $this->expectException(ModelNotFoundException::class);
-        $this->getInvoiceManager()
-             ->updateProduct(11, $data);
+        $product = $this->getInvoiceManager()->updateProduct($product->id, $changes);
+        $this->assertSame($changes['title'], $product->getTitle());
+        $this->assertSame($changes['count'], $product->getCount());
+        $this->assertSame(500, $product->getTotalAmount()->getValue());
     }
 
-    /**
-     * Testing delete Product.
-     */
-    public function testDeleteProduct(): void
+    public function testDeleteProduct()
     {
-        $product = Product::factory()
-                          ->create();
-        $response = $this->getInvoiceManager()
-                         ->deleteProduct($product->getID());
-        $this->assertSame($response->getID(), $product->invoice_id);
-    }
-
-    /**
-     * Testing merge invoice.
-     */
-    public function testMergeInvoice(): void
-    {
-        $user = User::factory()
-                    ->create();
-        $USD = $this->createUSD();
-        $first_invoice = Invoice::factory()
-                                ->withUser($user)
-                                ->withCurrency($USD)
-                                ->create();
-        $second_invoice = Invoice::factory()
-                                 ->withUser($user)
-                                 ->withCurrency($USD)
-                                 ->withMeta(['key1' => 'value1'])
-                                 ->create();
-        $data = [
-            'title' => 'Merge first invoice and second invoice',
-        ];
-        $invoice = $this->getInvoiceManager()
-                        ->merge([
-                                    $first_invoice->getID(),
-                                    $second_invoice->getID(),
-                                ], $data);
-        $this->assertSame($invoice->getTitle(), $data['title']);
-    }
-
-    /**
-     * Testing merge invoice user mismatch.
-     */
-    public function testMergeInvoiceUserMismatch(): void
-    {
-        $USD = $this->createUSD();
-        $first_invoice = Invoice::factory()
-                                ->withCurrency($USD)
-                                ->create();
-        $second_invoice = Invoice::factory()
-                                 ->withCurrency($USD)
-                                 ->create();
-        $data = [
-            'title' => 'Merge first invoice and second invoice',
-        ];
-        $this->expectException(InvoiceUserMismatchException::class);
-        $this->getInvoiceManager()
-             ->merge([
-                         $first_invoice->getID(),
-                         $second_invoice->getID(),
-                     ], $data);
-    }
-
-    /**
-     * Testing merge invoice currency mismatch.
-     */
-    public function testMergeInvoiceCurrencyMismatch(): void
-    {
-        $user = User::factory()
-                    ->create();
-        $USD = $this->createUSD();
-        $EUR = $this->createEUR();
-        $first_invoice = Invoice::factory()
-                                ->withUser($user)
-                                ->withCurrency($EUR)
-                                ->create();
-        $second_invoice = Invoice::factory()
-                                 ->withUser($user)
-                                 ->withCurrency($USD)
-                                 ->create();
-        $data = [
-            'title' => 'Merge first invoice and second invoice',
-        ];
-        $this->expectException(CurrencyMismatchException::class);
-        $this->getInvoiceManager()
-             ->merge([
-                         $first_invoice->getID(),
-                         $second_invoice->getID(),
-                     ], $data);
-    }
-
-    /**
-     * Testing merge first invoice is paid.
-     */
-    public function testMergeFirstInvoiceIsPaid(): void
-    {
-        $user = User::factory()
-                    ->create();
-        $USD = $this->createUSD();
-        $first_invoice = Invoice::factory()
-                                ->withUser($user)
-                                ->withCurrency($USD)
-                                ->paid(Carbon::now())
-                                ->create();
-        $second_invoice = Invoice::factory()
-                                 ->withUser($user)
-                                 ->withCurrency($USD)
-                                 ->create();
-        $data = [
-            'title' => 'Merge first invoice and second invoice',
-        ];
-        $this->expectException(InvalidInvoiceStatusException::class);
-        $this->getInvoiceManager()
-             ->merge([
-                         $first_invoice->getID(),
-                         $second_invoice->getID(),
-                     ], $data);
-    }
-
-    /**
-     * Testing merge second invoice in paid.
-     */
-    public function testMergeSecondInvoiceIsPaid(): void
-    {
-        $user = User::factory()
-                    ->create();
-        $USD = $this->createUSD();
-        $first_invoice = Invoice::factory()
-                                ->withUser($user)
-                                ->withCurrency($USD)
-                                ->create();
-        $second_invoice = Invoice::factory()
-                                 ->withUser($user)
-                                 ->withCurrency($USD)
-                                 ->paid(Carbon::now())
-                                 ->create();
-        $data = [
-            'title' => 'Merge first invoice and second invoice',
-        ];
-        $this->expectException(InvalidInvoiceStatusException::class);
-        $this->getInvoiceManager()
-             ->merge([
-                         $first_invoice->getID(),
-                         $second_invoice->getID(),
-                     ], $data);
-    }
-
-    /**
-     * Testing add payment to invoice.
-     */
-    public function testAddPaymentToInvoice(): void
-    {
+        $USD = Currency::factory()->asUSD()->create();
         $invoice = Invoice::factory()
-                          ->withAmount(1000000)
-                          ->create();
-        $user = User::factory()
-                    ->create();
-        Payment::factory()
-               ->withAmount(200000)
-               ->withStatus(PaymentStatus::PENDING)
-               ->withInvoice($invoice)
-               ->create();
-        Payment::factory()
-               ->withAmount(200000)
-               ->withStatus(PaymentStatus::APPROVED)
-               ->withInvoice($invoice)
-               ->withEUR()
-               ->create();
-        $paidAmount = Number::fromInt(200000);
-        $USD = Currency::factory()
-                       ->asUSD()
-                       ->create();
-        $payment = $this->getInvoiceManager()
-                        ->addPaymentToInvoice($invoice->getID(), 'online', $paidAmount, PaymentStatus::PENDING, [
-                            'key' => 'value',
-                        ], $USD->getID());
-        $this->assertSame($payment->getInvoiceID(), $invoice->getID());
-        $this->expectException(InvalidInvoiceStatusException::class);
-        $invoice->update([
-                             'status' => InvoiceStatus::PAID,
-                         ]);
-        $this->getInvoiceManager()
-             ->addPaymentToInvoice($invoice->getID(), 'online', $invoice->getAmount(), PaymentStatus::PENDING, [
-                 'key' => 'value',
-             ], $USD->getID());
+            ->withCurrency($USD)
+            ->has(Product::factory(2)->withCurrency($USD))
+            ->create();
+        $invoice->recalculateTotalAmount();
+        $invoice->recalculateTotalAmount(); // Double call on purpose to test if amount already was correct no extra query execute.
+
+        $product = $invoice->products[0];
+        $totalAmount = $invoice->getAmount();
+        $invoice = $this->getInvoiceManager()->deleteProduct($product->id);
+        $this->assertModelMissing($product);
+        $this->assertTrue($totalAmount->sub($product->getTotalAmount())->eq($invoice->getAmount()));
+        $this->assertCount(1, $invoice->getProducts());
     }
 
-    /**
-     * Testing add payment to invoice Mismatch Amount.
-     */
-    public function testAddPaymentToInvoiceMismatchAmount(): void
+    public function testMerge()
     {
-        $invoice = Invoice::factory()
-                          ->withAmount(1000000)
-                          ->create();
-        Payment::factory()
-               ->withAmount(200000)
-               ->withStatus(PaymentStatus::PENDING)
-               ->withInvoice($invoice)
-               ->create();
-        Payment::factory()
-               ->withAmount(200000)
-               ->withStatus(PaymentStatus::APPROVED)
-               ->withInvoice($invoice)
-               ->withEUR()
-               ->create();
-        $paidAmount = Number::fromInt(1000000);
-        $USD = Currency::factory()
-                       ->asUSD()
-                       ->create();
-        $this->expectException(AmountInvoiceMismatchException::class);
-        $this->getInvoiceManager()
-             ->addPaymentToInvoice($invoice->getID(), 'online', $paidAmount, PaymentStatus::PENDING, [
-                 'key' => 'value',
-             ], $USD->getID());
+        $user = User::factory()->create();
+        $USD = Currency::factory()->asUSD()->create();
+        $invoices = Invoice::factory(2)
+            ->withCurrency($USD)
+            ->withUser($user)
+            ->has(Product::factory()->withCurrency($USD))
+            ->has(Payment::factory()->withCurrency($USD))
+            ->create()
+            ->each(fn($i) => $i->recalculateTotalAmount());
+        $newInvoice = $this->getInvoiceManager()->merge($invoices->pluck("id")->all(), array(
+            'title' => 'merged invoice',
+        ));
+        $this->assertSame('merged invoice', $newInvoice->getTitle());
+        $this->assertCount(2, $newInvoice->getProducts());
+        $this->assertCount(2, $newInvoice->getPayments());
+        $this->assertSame($invoices->map(fn(Invoice $i) => $i->getAmount()->getValue())->sum(), $newInvoice->getAmount()->getValue());
+        $this->assertSame($invoices->map(fn(Invoice $i) => $i->getPaidAmount(true)->getValue())->sum(), $newInvoice->getPaidAmount(true)->getValue());
     }
 
-    /**
-     * Testing add payment to invoice when Finished payments.
-     */
-    public function testAddPaymentToInvoiceFinishedPayment(): void
+    public function testAddPaymentToInvoiceAndReject()
     {
+        $USD = Currency::factory()->asUSD()->create();
+
+        /**
+         * @var Invoice
+         */
         $invoice = Invoice::factory()
-                          ->withAmount(1000000)
-                          ->create();
-        Payment::factory()
-               ->withAmount(400000)
-               ->withStatus(PaymentStatus::PENDING)
-               ->withInvoice($invoice)
-               ->create();
-        Payment::factory()
-               ->withAmount(600000)
-               ->withStatus(PaymentStatus::APPROVED)
-               ->withInvoice($invoice)
-               ->withEUR()
-               ->create();
-        $paidAmount = Number::fromInt(1000000);
-        $USD = Currency::factory()
-                       ->asUSD()
-                       ->create();
-        $this->expectException(FinishedInvoicePaymentsException::class);
-        $this->getInvoiceManager()
-             ->addPaymentToInvoice($invoice->getID(), 'online', $paidAmount, PaymentStatus::PENDING, [
-                 'key' => 'value',
-             ], $USD->getID());
+            ->withCurrency($USD)
+            ->has(Product::factory()->withCurrency($USD))
+            ->create();
+        $invoice->recalculateTotalAmount();
+        
+        $method = new class() implements IPaymentMethod {};
+        $now = time();
+        $payment = $this->getInvoiceManager()->addPaymentToInvoice(
+            $invoice->id, 
+            get_class($method),
+            $USD->getID(),
+            $invoice->getAmount(),
+            ['key' => 'value']
+        );
+        $this->assertSame($invoice->getID(), $payment->getInvoiceID());
+        $this->assertSame($invoice->getID(), $payment->getInvoice()->getID());
+        $this->assertSame(get_class($method), $payment->getMethod());
+        $this->assertSame(['key' => 'value'], $payment->getMeta());
+        $this->assertSame($now, $payment->getCreateTime());
+        $this->assertSame($now, $payment->getUpdateTime());
+        $this->assertSame(0, $payment->invoice->getPaidAmount(false)->getValue());
+        $this->assertTrue($payment->invoice->getPaidAmount(true)->eq($payment->getAmount()));
+        $this->assertSame(InvoiceStatus::UNPAID, $payment->invoice->getStatus());
+        $this->assertSame(PaymentStatus::PENDING, $payment->getStatus());
+
+        $payment = $this->getInvoiceManager()->rejectPayment($payment->getID());
+        $this->assertSame(0, $payment->invoice->getPaidAmount(false)->getValue());
+        $this->assertSame(0, $payment->invoice->getPaidAmount(true)->getValue());
+        $this->assertSame(InvoiceStatus::UNPAID, $payment->invoice->getStatus());
+        $this->assertSame(PaymentStatus::REJECTED, $payment->getStatus());
     }
 
-    /**
-     * Testing  payment that is pending.
-     */
-    public function testApprovePayment(): void
+    public function testApprovePayment()
     {
+        $USD = Currency::factory()->asUSD()->create();
+        $userAccount = Account::factory()->withCurrency($USD)->create();
+        $systemAccount = $this->setupExpenseAccount($USD);
+    
+        $profitAccount = Account::factory()->withCurrency($USD)->create();
+        $savingAccount = Account::factory()->withCurrency($USD)->create();
+        $taxAccount = Account::factory()->withCurrency($USD)->create();
+
+        /**
+         * @var ITransactionManager
+         */
+        $transactionManager = app(ITransactionManager::class);
+        $transaction = $transactionManager->transfer($userAccount->getID(), $systemAccount->getID(), Number::fromInput(200), null, true);
+
+        $distributionPlan = array(
+            $profitAccount->getID() => Number::fromInput(30),
+            $taxAccount->getID() => Number::fromInput(9),
+            $savingAccount->getID() => Number::fromInput(61),
+        );
+        /**
+         * @var Invoice
+         */
         $invoice = Invoice::factory()
-                          ->withAmount(1000)
-                          ->create();
-        $payment = Payment::factory()
-                          ->withAmount(200)
-                          ->withInvoice($invoice)
-                          ->create();
-        $response = $this->getInvoiceManager()
-                         ->approvePayment($payment->getID());
-        $this->assertSame($response->getStatus(), PaymentStatus::APPROVED);
-        $payment->update([
-                             'status' => PaymentStatus::APPROVED,
-                         ]);
-        $this->expectException(ModelNotFoundException::class);
-        $this->getInvoiceManager()
-             ->approvePayment(11);
+            ->withCurrency($USD)
+            ->has(Product::factory()
+                ->withCurrency($USD)
+                ->withDistributionPlan($distributionPlan)
+                ->withPrice(150)
+                ->withDiscount(50)
+                ->withCount(2))
+            ->create();
+        $invoice->recalculateTotalAmount();
+        
+        $method = new class() implements IPaymentMethod {};
+
+        $payment = $this->getInvoiceManager()->addPaymentToInvoice(
+            $invoice->id, 
+            get_class($method),
+            $USD->getID(),
+            $invoice->getAmount(),
+            ['key' => 'value']
+        );
+        $payment = $this->getInvoiceManager()->approvePayment($payment->getID(), $transaction->getID());
+        $invoice->refresh();
+        $this->assertSame(0, $invoice->getUnpaidAmount(true)->getValue());
+        $this->assertTrue($invoice->getPaidAmount(false)->eq($payment->getAmount()));
+        $this->assertSame(InvoiceStatus::PAID, $invoice->getStatus());
+        $this->assertSame(PaymentStatus::APPROVED, $payment->getStatus());
+        $this->assertSame($transaction->getID(), $payment->getTransactionId());
+        $this->assertDatabaseHas(Transaction::class, array(
+            'from_id' => $systemAccount->getID(),
+            'to_id' => $profitAccount->getID(),
+            'amount' => 30 * 2,
+        ));
+        $this->assertDatabaseHas(Transaction::class, array(
+            'from_id' => $systemAccount->getID(),
+            'to_id' => $savingAccount->getID(),
+            'amount' => 61 * 2,
+        ));
+        $this->assertDatabaseHas(Transaction::class, array(
+            'from_id' => $systemAccount->getID(),
+            'to_id' => $taxAccount->getID(),
+            'amount' => 9 * 2,
+        ));
     }
 
-    /**
-     * Testing payment approved invalid status.
-     */
-    public function testApprovePaymentInvalidStatus(): void
-    {
-        $invoice = Invoice::factory()
-                          ->withAmount(1000)
-                          ->create();
-        $payment = Payment::factory()
-                          ->withAmount(200)
-                          ->withInvoice($invoice)
-                          ->withStatus(PaymentStatus::APPROVED)
-                          ->create();
-        $this->expectException(InvalidInvoiceStatusException::class);
-        $this->getInvoiceManager()
-             ->approvePayment($payment->getID());
-    }
-
-    /**
-     * Testing payment approved with invoice paid.
-     */
-    public function testApprovePaymentWithInvoicePaid(): void
-    {
-        $invoice = Invoice::factory()
-                          ->withAmount(1000)
-                          ->create();
-        Payment::factory()
-               ->withAmount(400)
-               ->withInvoice($invoice)
-               ->withStatus(PaymentStatus::APPROVED)
-               ->create();
-        $payment = Payment::factory()
-                          ->withAmount(600)
-                          ->withInvoice($invoice)
-                          ->create();
-        $response = $this->getInvoiceManager()
-                         ->approvePayment($payment->getID());
-        $this->assertSame($response->getStatus(), PaymentStatus::APPROVED);
-        $this->assertSame($response->invoice->getStatus(), InvoiceStatus::PAID);
-        $this->assertSame($response->invoice->paid_at->toDateString(), Carbon::now()
-                                                                              ->toDateString());
-    }
-
-    /**
-     *Testing approve payment amount mismatch.
-     */
-    public function tesApprovePaymentAmountMismatch(): void
-    {
-        $invoice = Invoice::factory()
-                          ->withAmount(1000)
-                          ->create();
-        $payment = Payment::factory()
-                          ->withAmount(10000)
-                          ->withInvoice($invoice)
-                          ->create();
-        $this->expectException(AmountInvoiceMismatchException::class);
-        $this->getInvoiceManager()
-             ->approvePayment($payment->getID());
-    }
-
-    /**
-     * Testing reject payment.
-     */
-    public function testRejectPayment(): void
-    {
-        $invoice = Invoice::factory()
-                          ->create();
-        $payment = Payment::factory()
-                          ->withInvoice($invoice)
-                          ->create();
-        $response = $this->getInvoiceManager()
-                         ->rejectPayment($payment->getID());
-        $this->assertSame($response->getStatus(), PaymentStatus::REJECTED);
-        $payment->update([
-                             'status' => PaymentStatus::APPROVED,
-                         ]);
-        $this->expectException(InvalidInvoiceStatusException::class);
-        $this->getInvoiceManager()
-             ->rejectPayment($payment->getID());
-        $this->expectException(ModelNotFoundException::class);
-        $this->getInvoiceManager()
-             ->rejectPayment(11);
-    }
 }

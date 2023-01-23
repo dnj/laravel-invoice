@@ -10,6 +10,7 @@ use dnj\Invoice\ModelHelpers;
 use dnj\Invoice\Models\Invoice;
 use dnj\Invoice\Tests\Factories\UserFactory;
 use dnj\Invoice\Tests\Models\User;
+use dnj\Number\Contracts\INumber;
 use dnj\Number\Number;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -21,7 +22,6 @@ class InvoiceFactory extends Factory
 
     public function definition()
     {
-        // TODO: Implement definition() method.
         $userModel = $this->getUserModel() ?? User::class;
 
         return [
@@ -86,25 +86,27 @@ class InvoiceFactory extends Factory
 
     public function withUSD()
     {
-        return $this->withCurrency(Currency::factory()
-                                           ->create()
-                                           ->asUSD());
+        return $this->withCurrency(Currency::factory()->create()->asUSD());
     }
 
     public function withEUR()
     {
-        return $this->withCurrency(Currency::factory()
-                                           ->create()
-                                           ->asEUR());
+        return $this->withCurrency(Currency::factory()->asEUR());
     }
 
-    public function paid(Carbon $paid_at)
+    public function paid(?\DateTimeInterface $paidAt = null)
     {
-        return $this->withStatus(InvoiceStatus::PAID, $paid_at);
+        return $this->state(fn () => [
+            'status' => InvoiceStatus::PAID,
+            'paid_at' => $paidAt ?? now(),
+        ]);
     }
 
-    public function unPaid()
+    public function unpaid()
     {
-        return $this->withStatus(InvoiceStatus::UNPAID);
+        return $this->state(fn () => [
+            'status' => InvoiceStatus::UNPAID,
+            'paid_at' => null,
+        ]);
     }
 }
